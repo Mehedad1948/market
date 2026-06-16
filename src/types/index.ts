@@ -53,6 +53,22 @@ export type MovingAverageAnalysis = {
   crossMonthlyBelowQuarterly: boolean;
 };
 
+export type LiquidityMetrics = {
+  latestTradeValue: number;
+  maWeekly: number;
+  maMonthly: number;
+  maQuarterly: number;
+  weeklySlope: number;
+  monthlySlope: number;
+  quarterlySlope: number;
+};
+
+export type BuyTimeframes = {
+  shortTerm: boolean;
+  midTerm: boolean;
+  longTerm: boolean;
+};
+
 export type AnalysisRegime =
   | 'STRONG_BULLISH_LIQUIDITY'
   | 'EARLY_BULLISH'
@@ -94,6 +110,7 @@ export type StockAnalysisResult = {
     crossMonthlyAboveQuarterly: boolean;
     crossMonthlyBelowQuarterly: boolean;
     confidence: AnalysisConfidence;
+    buy: BuyTimeframes;
   };
   persianSummary: string;
   disclaimer: string;

@@ -1,12 +1,16 @@
 import type { SymbolDailyMetric } from '@prisma/client';
 
+import { env } from '../config/env';
 import type {
   AnalysisConfidence,
   AnalysisRegime,
+  BuyTimeframes,
+  LiquidityMetrics,
   MovingAverageAnalysis,
   StockAnalysisResult,
   SymbolAnalysisParams
 } from '../types';
+import { round } from '../utils/number';
 import {
   calculateSlope,
   calculateSmaSeries,
@@ -14,7 +18,6 @@ import {
   detectCrossBelow
 } from './movingAverage.service';
 import { analysisDisclaimer, buildPersianSummary } from './persianSemantic.service';
-import { round } from '../utils/number';
 
 const toNumber = (value: { toString(): string } | null): number | null => {
   return value === null ? null : Number(value.toString());
@@ -26,6 +29,40 @@ export class InsufficientDataError extends Error {
     this.name = 'InsufficientDataError';
   }
 }
+
+export const isAboveBy = (a: number, b: number, threshold = 0.02): boolean => {
+  return a > b * (1 + threshold);
+};
+
+export const calculateBuyTimeframes = (
+  metrics: LiquidityMetrics,
+  threshold = 0.02
+): BuyTimeframes => {
+  const {
+    latestTradeValue,
+    maWeekly,
+    maMonthly,
+    maQuarterly,
+    weeklySlope,
+    monthlySlope,
+    quarterlySlope
+  } = metrics;
+
+  return {
+    shortTerm:
+      isAboveBy(maWeekly, maMonthly, threshold) &&
+      weeklySlope > 0 &&
+      latestTradeValue > maWeekly,
+    midTerm:
+      isAboveBy(maMonthly, maQuarterly, threshold) &&
+      monthlySlope > 0 &&
+      latestTradeValue > maMonthly,
+    longTerm:
+      quarterlySlope > 0 &&
+      maMonthly > maQuarterly &&
+      latestTradeValue > maQuarterly
+  };
+};
 
 export const classifyRegime = (
   metrics: MovingAverageAnalysis
@@ -112,7 +149,9 @@ export const analyzeSymbolMetrics = (
     throw new InsufficientDataError();
   }
 
-  const values = rows.map((row) => toNumber(row.tradeValue)).filter((value): value is number => value !== null);
+  const values = rows
+    .map((row) => toNumber(row.tradeValue))
+    .filter((value): value is number => value !== null);
 
   if (values.length < params.quarterlyWindow) {
     throw new InsufficientDataError();
@@ -163,12 +202,31 @@ export const analyzeSymbolMetrics = (
   const latestClosePriceChangePercent = toNumber(latestRow.closePriceChangePercent);
   const valueChangeVsMonthly =
     latestTradeValue !== null && movingAverageAnalysis.maMonthly !== 0
-      ? round((latestTradeValue - movingAverageAnalysis.maMonthly) / Math.abs(movingAverageAnalysis.maMonthly))
+      ? round(
+          (latestTradeValue - movingAverageAnalysis.maMonthly) /
+            Math.abs(movingAverageAnalysis.maMonthly)
+        )
       : null;
   const valueChangeVsQuarterly =
     latestTradeValue !== null && movingAverageAnalysis.maQuarterly !== 0
-      ? round((latestTradeValue - movingAverageAnalysis.maQuarterly) / Math.abs(movingAverageAnalysis.maQuarterly))
+      ? round(
+          (latestTradeValue - movingAverageAnalysis.maQuarterly) /
+            Math.abs(movingAverageAnalysis.maQuarterly)
+        )
       : null;
+
+  const buy = calculateBuyTimeframes(
+    {
+      latestTradeValue: latestTradeValue ?? 0,
+      maWeekly: movingAverageAnalysis.maWeekly,
+      maMonthly: movingAverageAnalysis.maMonthly,
+      maQuarterly: movingAverageAnalysis.maQuarterly,
+      weeklySlope: movingAverageAnalysis.weeklySlope,
+      monthlySlope: movingAverageAnalysis.monthlySlope,
+      quarterlySlope: movingAverageAnalysis.quarterlySlope
+    },
+    env.BUY_THRESHOLD_PERCENT
+  );
 
   return {
     status: 'OK',
@@ -200,9 +258,10 @@ export const analyzeSymbolMetrics = (
       crossWeeklyBelowMonthly: movingAverageAnalysis.crossWeeklyBelowMonthly,
       crossMonthlyAboveQuarterly: movingAverageAnalysis.crossMonthlyAboveQuarterly,
       crossMonthlyBelowQuarterly: movingAverageAnalysis.crossMonthlyBelowQuarterly,
-      confidence
+      confidence,
+      buy
     },
-    persianSummary: buildPersianSummary(symbol, regime, confidence),
+    persianSummary: buildPersianSummary(symbol, regime, confidence, buy),
     disclaimer: analysisDisclaimer
   };
 };

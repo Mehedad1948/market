@@ -1,4 +1,4 @@
-import type { AnalysisConfidence, AnalysisRegime } from '../types';
+import type { AnalysisConfidence, AnalysisRegime, BuyTimeframes } from '../types';
 
 const DISCLAIMER =
   'این تحلیل صرفاً توصیف وضعیت ارزش معاملات است و توصیه خرید یا فروش محسوب نمی‌شود.';
@@ -18,17 +18,40 @@ const baseMessageByRegime: Record<AnalysisRegime, string> = {
     'وضعیت ارزش معاملات {symbol} سیگنال واضحی از ورود یا خروج قدرتمند نقدینگی نشان نمی‌دهد. ساختار میانگین‌ها ترکیبی است و بهتر است تحلیل با روند قیمت، مقاومت‌ها، حمایت‌ها و وضعیت کلی بازار ترکیب شود.'
 };
 
+export const generateBuyTimeframePersianSummary = (buy: BuyTimeframes): string => {
+  const active: string[] = [];
+
+  if (buy.shortTerm) active.push('کوتاه‌مدت');
+  if (buy.midTerm) active.push('میان‌مدت');
+  if (buy.longTerm) active.push('بلندمدت');
+
+  if (active.length === 0) {
+    return 'در حال حاضر هیچ‌کدام از شروط خرید مبتنی بر ارزش معاملات فعال نیست.';
+  }
+
+  return `شروط خرید مبتنی بر ارزش معاملات در بازه‌های ${active.join('، ')} فعال است.`;
+};
+
 export const buildPersianSummary = (
   symbol: string,
   regime: AnalysisRegime,
-  confidence?: AnalysisConfidence
+  confidence?: AnalysisConfidence,
+  buy?: BuyTimeframes
 ): string => {
   const message = baseMessageByRegime[regime].replace('{symbol}', symbol);
-  if (!confidence) {
-    return `${message} ${DISCLAIMER}`;
+  const parts = [message];
+
+  if (confidence) {
+    parts.push(`سطح اطمینان این جمع‌بندی ${confidence} ارزیابی می‌شود.`);
   }
 
-  return `${message} سطح اطمینان این جمع‌بندی ${confidence} ارزیابی می‌شود. ${DISCLAIMER}`;
+  if (buy) {
+    parts.push(generateBuyTimeframePersianSummary(buy));
+  }
+
+  parts.push(DISCLAIMER);
+
+  return parts.join(' ');
 };
 
 export const analysisDisclaimer = DISCLAIMER;

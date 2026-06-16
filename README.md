@@ -66,6 +66,7 @@ CACHE_TTL_SECONDS=86400
 DEFAULT_WEEKLY_WINDOW=7
 DEFAULT_MONTHLY_WINDOW=30
 DEFAULT_QUARTERLY_WINDOW=90
+BUY_THRESHOLD_PERCENT=0.02
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX_REQUESTS=60
 ```
@@ -133,6 +134,10 @@ The analysis uses `tval` as daily traded value and computes:
 - Quarterly SMA: `SMA(tval, 90)`
 - Slopes for weekly, monthly, and quarterly SMA series
 - Weekly/monthly and monthly/quarterly crossover signals
+- Technical/liquidity-based buy timeframes:
+  - `shortTerm`: `maWeekly` is above `maMonthly` by at least `BUY_THRESHOLD_PERCENT`, `weeklySlope > 0`, and `latestTradeValue > maWeekly`
+  - `midTerm`: `maMonthly` is above `maQuarterly` by at least `BUY_THRESHOLD_PERCENT`, `monthlySlope > 0`, and `latestTradeValue > maMonthly`
+  - `longTerm`: `quarterlySlope > 0`, `maMonthly > maQuarterly`, and `latestTradeValue > maQuarterly`
 
 Regimes:
 
@@ -143,6 +148,24 @@ Regimes:
 - `BEARISH_LIQUIDITY`: `maWeekly < maMonthly < maQuarterly` and `monthlySlope < 0`
 - `NEUTRAL`: all other cases
 
+Example `signals` payload:
+
+```json
+{
+  "regime": "STRONG_BULLISH_LIQUIDITY",
+  "crossWeeklyAboveMonthly": false,
+  "crossWeeklyBelowMonthly": false,
+  "crossMonthlyAboveQuarterly": false,
+  "crossMonthlyBelowQuarterly": false,
+  "confidence": "MEDIUM",
+  "buy": {
+    "shortTerm": true,
+    "midTerm": true,
+    "longTerm": true
+  }
+}
+```
+
 ## Behavior Notes
 
 - BRS dates are stored as strings to avoid Jalali conversion bugs.
@@ -150,6 +173,7 @@ Regimes:
 - Real/legal history is optional and does not block main analysis.
 - Cache keys use `symbol + paramsHash + latestDataDate`.
 - Every analysis request is logged in `AnalysisRequest`.
+- `signals.buy` describes liquidity-based technical conditions and is **not** a direct trade recommendation.
 
 ## Testing
 
@@ -164,6 +188,7 @@ Included test coverage:
 - Regime classification
 - Persian semantic generation
 - Safe number parsing
+- Buy timeframe calculation and response shape
 
 ## Warning
 
