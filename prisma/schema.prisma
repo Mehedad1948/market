@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Symbol {
+  id        String   @id @default(uuid())
+  symbol    String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SymbolDailyMetric {
+  id                      String   @id @default(uuid())
+  symbol                  String
+  date                    String
+  time                    String?
+  tradeCount              BigInt?
+  tradeVolume             Decimal? @db.Decimal(30, 4)
+  tradeValue              Decimal? @db.Decimal(30, 4)
+  priceMin                Decimal? @db.Decimal(30, 4)
+  priceMax                Decimal? @db.Decimal(30, 4)
+  priceYesterday          Decimal? @db.Decimal(30, 4)
+  priceFirst              Decimal? @db.Decimal(30, 4)
+  priceLast               Decimal? @db.Decimal(30, 4)
+  priceLastChange         Decimal? @db.Decimal(30, 4)
+  priceLastChangePercent  Decimal? @db.Decimal(30, 8)
+  closePrice              Decimal? @db.Decimal(30, 4)
+  closePriceChange        Decimal? @db.Decimal(30, 4)
+  closePriceChangePercent Decimal? @db.Decimal(30, 8)
+  rawJson                 Json
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@unique([symbol, date])
+  @@index([symbol, date])
+}
+
+model SymbolRealLegalDaily {
+  id                  String   @id @default(uuid())
+  symbol              String
+  date                String
+  buyCountIndividual  BigInt?
+  buyCountLegal       BigInt?
+  sellCountIndividual BigInt?
+  sellCountLegal      BigInt?
+  buyVolumeIndividual Decimal? @db.Decimal(30, 4)
+  buyVolumeLegal      Decimal? @db.Decimal(30, 4)
+  sellVolumeIndividual Decimal? @db.Decimal(30, 4)
+  sellVolumeLegal     Decimal? @db.Decimal(30, 4)
+  buyValueIndividual  Decimal? @db.Decimal(30, 4)
+  sellValueIndividual Decimal? @db.Decimal(30, 4)
+  rawJson             Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([symbol, date])
+  @@index([symbol, date])
+}
+
+model AnalysisCache {
+  id             String   @id @default(uuid())
+  symbol         String
+  paramsHash     String
+  latestDataDate String
+  result         Json
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([symbol, paramsHash, latestDataDate])
+  @@index([symbol, expiresAt])
+}
+
+model AnalysisRequest {
+  id         String   @id @default(uuid())
+  symbol     String
+  params     Json
+  cacheHit   Boolean
+  dataSource String
+  status     String
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([symbol, createdAt])
+}

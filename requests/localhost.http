@@ -1,0 +1,52 @@
+@baseUrl = http://localhost:3000
+@json = application/json
+
+### Health Check
+GET {{baseUrl}}/health
+Accept: application/json
+
+### Analyze Symbol - Default Windows
+GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis
+Accept: application/json
+
+### Analyze Symbol - Force Refresh
+GET {{baseUrl}}/api/stocks/%D8%AE%D9%88%D8%AF%D8%B1%D9%88/analysis?forceRefresh=true
+Accept: application/json
+
+### Analyze Symbol - Custom Windows
+GET {{baseUrl}}/api/stocks/%D8%B4%D9%BE%D9%86%D8%A7/analysis?weeklyWindow=7&monthlyWindow=30&quarterlyWindow=90&forceRefresh=false&includeRealLegal=false
+Accept: application/json
+
+### Analyze Symbol - Include Real Legal History
+GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis?includeRealLegal=true
+Accept: application/json
+
+### Force Refresh Symbol History
+POST {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/refresh
+Content-Type: {{json}}
+Accept: application/json
+
+{
+  "includeRealLegal": false
+}
+
+### Force Refresh Symbol History With Real Legal
+POST {{baseUrl}}/api/stocks/%D8%AE%D9%88%D8%AF%D8%B1%D9%88/refresh
+Content-Type: {{json}}
+Accept: application/json
+
+{
+  "includeRealLegal": true
+}
+
+### Get Stored History
+GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/history?limit=20&offset=0
+Accept: application/json
+
+### Get Latest Stored Metric
+GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/latest
+Accept: application/json
+
+### Invalid Window Validation Example
+GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis?weeklyWindow=30&monthlyWindow=7&quarterlyWindow=90
+Accept: application/json
