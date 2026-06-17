@@ -10,7 +10,7 @@ import {
   classifyRegime,
   isAboveBy
 } from '../src/services/analysis.service';
-import type { StochRsiAnalysis } from '../src/types';
+import type { PriceTrendAnalysis, StochRsiAnalysis } from '../src/types';
 
 const baseStochRsi: StochRsiAnalysis = {
   status: 'OK',
@@ -29,6 +29,27 @@ const baseStochRsi: StochRsiAnalysis = {
   probableBuy: false,
   riskSell: false,
   confirmedSell: false
+};
+
+const basePriceTrend: PriceTrendAnalysis = {
+  status: 'OK',
+  latestDate: '1403-01-13',
+  latestClosePrice: 100,
+  fastMa: 95,
+  midMa: 90,
+  longMa: 80,
+  fastSlope: 0.01,
+  midSlope: 0.01,
+  longSlope: 0.01,
+  closeAboveFastMa: true,
+  closeAboveMidMa: true,
+  closeAboveLongMa: true,
+  fastAboveMidMa: true,
+  midAboveLongMa: true,
+  direction: 'NEUTRAL',
+  bullish: false,
+  bearish: false,
+  warning: false
 };
 
 describe('analysis.service', () => {
@@ -210,10 +231,21 @@ describe('analysis.service', () => {
         riskSell: expect.any(Boolean),
         confirmedSell: expect.any(Boolean)
       },
+      priceTrend: {
+        status: expect.any(String),
+        direction: expect.any(String),
+        bullish: expect.any(Boolean),
+        bearish: expect.any(Boolean),
+        warning: expect.any(Boolean)
+      },
       composite: {
         action: expect.any(String),
         score: expect.any(Number),
-        explanationKey: expect.any(String)
+        explanationKey: expect.any(String),
+        scoreScale: {
+          min: -100,
+          max: 100
+        }
       }
     });
     expect('bullish' in result.signals).toBe(false);
@@ -232,6 +264,11 @@ describe('analysis.service', () => {
         probableBuy: true,
         greenBullishCrossCount: 1,
         crossUpInGreen: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'IMPROVING',
+        bullish: true
       }
     );
 
@@ -255,6 +292,12 @@ describe('analysis.service', () => {
         confirmedSell: true,
         redBearishCrossCount: 2,
         crossDownInRed: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'BEARISH',
+        bearish: true,
+        warning: true
       }
     );
 
@@ -275,7 +318,8 @@ describe('analysis.service', () => {
     const sell = calculateSellTimeframes(
       'STRONG_BULLISH_LIQUIDITY',
       buy,
-      baseStochRsi
+      baseStochRsi,
+      basePriceTrend
     );
 
     expect(buy.longTerm).toBe(true);
@@ -284,5 +328,184 @@ describe('analysis.service', () => {
       midTerm: false,
       longTerm: false
     });
+  });
+
+  it('Stoch RSI confirmedSell applies -50 without also applying riskSell -25', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        riskSell: true,
+        confirmedSell: true
+      },
+      basePriceTrend
+    );
+
+    expect(composite.score).toBe(-50);
+  });
+
+  it('riskSell without confirmedSell applies -25', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: true,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        riskSell: true
+      },
+      basePriceTrend
+    );
+
+    expect(composite.score).toBe(-5);
+    expect(composite.action).toBe('CAUTION');
+  });
+
+  it('composite score clamps to +100 and -100', () => {
+    const bullish = calculateCompositeSignal(
+      'STRONG_BULLISH_LIQUIDITY',
+      {
+        shortTerm: true,
+        midTerm: true,
+        longTerm: true
+      },
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'BULLISH',
+        bullish: true
+      }
+    );
+    const bearish = calculateCompositeSignal(
+      'BEARISH_LIQUIDITY',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        riskSell: true,
+        confirmedSell: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'BEARISH',
+        bearish: true,
+        warning: true
+      }
+    );
+
+    expect(bullish.score).toBe(100);
+    expect(bearish.score).toBe(-100);
+  });
+
+  it('STRONG_BUY requires liquidity buy, Stoch RSI buy, and bullish price trend', () => {
+    const composite = calculateCompositeSignal(
+      'STRONG_BULLISH_LIQUIDITY',
+      {
+        shortTerm: true,
+        midTerm: true,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'BULLISH',
+        bullish: true
+      }
+    );
+
+    expect(composite.action).toBe('STRONG_BUY');
+  });
+
+  it('confirmedSell with strong liquidity and non-bearish price trend returns CAUTION', () => {
+    const composite = calculateCompositeSignal(
+      'STRONG_BULLISH_LIQUIDITY',
+      {
+        shortTerm: true,
+        midTerm: true,
+        longTerm: true
+      },
+      {
+        ...baseStochRsi,
+        riskSell: true,
+        confirmedSell: true
+      },
+      basePriceTrend
+    );
+
+    expect(composite.action).toBe('CAUTION');
+    expect(composite.explanationKey).toBe(
+      'composite.confirmedSellButTrendStrong'
+    );
+  });
+
+  it('riskSell with weak short-term liquidity returns RISK_SELL', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: true,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        riskSell: true
+      },
+      basePriceTrend
+    );
+
+    expect(composite.action).toBe('RISK_SELL');
+  });
+
+  it('probableBuy with improving price trend returns PROBABLE_BUY', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'IMPROVING',
+        bullish: true
+      }
+    );
+
+    expect(composite.action).toBe('PROBABLE_BUY');
+  });
+
+  it('mixed neutral signals return HOLD', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      baseStochRsi,
+      basePriceTrend
+    );
+
+    expect(composite.action).toBe('HOLD');
   });
 });

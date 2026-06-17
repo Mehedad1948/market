@@ -3,11 +3,13 @@ import type { SymbolDailyMetric } from '@prisma/client';
 import { env } from '../config/env';
 import type {
   AnalysisConfidence,
-  CompositeSignal,
   AnalysisRegime,
   BuyTimeframes,
+  CompositeSignal,
   LiquidityMetrics,
   MovingAverageAnalysis,
+  PriceTrendAnalysis,
+  PriceTrendConfig,
   SellTimeframes,
   StochRsiAnalysis,
   StochRsiConfig,
@@ -25,6 +27,7 @@ import {
   analysisDisclaimer,
   buildPersianSummary
 } from './persianSemantic.service';
+import { calculatePriceTrendAnalysis } from './priceTrend.service';
 import { calculateStochRsiAnalysis } from './stochRsi.service';
 
 const toNumber = (value: { toString(): string } | null): number | null => {
@@ -176,19 +179,47 @@ export const getStochRsiConfig = (): StochRsiConfig => {
   };
 };
 
+export const getPriceTrendConfig = (): PriceTrendConfig => {
+  return {
+    fastWindow: env.PRICE_FAST_MA_WINDOW,
+    midWindow: env.PRICE_MID_MA_WINDOW,
+    longWindow: env.PRICE_LONG_MA_WINDOW,
+    maType: env.PRICE_MA_TYPE,
+    minSlope: env.PRICE_TREND_MIN_SLOPE
+  };
+};
+
+export const buildAnalysisConfigForCache = () => {
+  return {
+    buyThresholdPercent: env.BUY_THRESHOLD_PERCENT,
+    compositeScoringVersion: env.COMPOSITE_SCORING_VERSION,
+    stochRsi: getStochRsiConfig(),
+    priceTrend: getPriceTrendConfig()
+  };
+};
+
 export const calculateSellTimeframes = (
   regime: AnalysisRegime,
   buy: BuyTimeframes,
-  stochRsi: StochRsiAnalysis
+  stochRsi: StochRsiAnalysis,
+  priceTrend: PriceTrendAnalysis
 ): SellTimeframes => {
   return {
-    shortTerm: stochRsi.riskSell || regime === 'SHORT_TERM_WARNING',
+    shortTerm:
+      stochRsi.riskSell ||
+      stochRsi.confirmedSell ||
+      priceTrend.warning ||
+      regime === 'SHORT_TERM_WARNING',
     midTerm:
       stochRsi.confirmedSell &&
-      (regime === 'SHORT_TERM_WARNING' ||
-        regime === 'BEARISH_LIQUIDITY' ||
-        !buy.midTerm),
-    longTerm: regime === 'BEARISH_LIQUIDITY' && stochRsi.confirmedSell
+      (!buy.midTerm ||
+        priceTrend.bearish ||
+        regime === 'SHORT_TERM_WARNING' ||
+        regime === 'BEARISH_LIQUIDITY'),
+    longTerm:
+      regime === 'BEARISH_LIQUIDITY' &&
+      stochRsi.confirmedSell &&
+      priceTrend.bearish
   };
 };
 
@@ -199,51 +230,69 @@ const clampScore = (score: number): number => {
 export const calculateCompositeSignal = (
   regime: AnalysisRegime,
   buy: BuyTimeframes,
-  stochRsi: StochRsiAnalysis
+  stochRsi: StochRsiAnalysis,
+  priceTrend: PriceTrendAnalysis
 ): CompositeSignal => {
   const activeSellSignal = stochRsi.riskSell || stochRsi.confirmedSell;
   const bullishRegime =
     regime === 'STRONG_BULLISH_LIQUIDITY' ||
     regime === 'EARLY_BULLISH' ||
     regime === 'CONFIRMED_BULLISH';
+  const liquidityRegimeIsBullishOrNeutral =
+    bullishRegime || regime === 'NEUTRAL';
+  const confirmedSell =
+    stochRsi.confirmedSell &&
+    (priceTrend.bearish ||
+      regime === 'SHORT_TERM_WARNING' ||
+      regime === 'BEARISH_LIQUIDITY' ||
+      !buy.midTerm);
+  const confirmedSellButTrendStrong =
+    stochRsi.confirmedSell &&
+    regime === 'STRONG_BULLISH_LIQUIDITY' &&
+    buy.midTerm &&
+    !priceTrend.bearish;
+  const riskSell = stochRsi.riskSell && (!buy.shortTerm || priceTrend.warning);
+  const caution =
+    stochRsi.riskSell || regime === 'SHORT_TERM_WARNING' || priceTrend.warning;
   const strongBuy =
     stochRsi.probableBuy &&
     buy.shortTerm &&
     buy.midTerm &&
+    priceTrend.bullish &&
     regime !== 'BEARISH_LIQUIDITY' &&
+    !stochRsi.riskSell &&
     !stochRsi.confirmedSell;
   const probableBuy =
     stochRsi.probableBuy &&
     regime !== 'BEARISH_LIQUIDITY' &&
+    !stochRsi.confirmedSell &&
     (buy.shortTerm ||
       regime === 'EARLY_BULLISH' ||
-      regime === 'CONFIRMED_BULLISH');
-  const confirmedSell =
-    stochRsi.confirmedSell &&
-    (regime === 'SHORT_TERM_WARNING' ||
-      regime === 'BEARISH_LIQUIDITY' ||
-      !buy.midTerm);
-  const riskSell = stochRsi.riskSell && !buy.shortTerm;
-  const caution =
-    (stochRsi.riskSell && !stochRsi.confirmedSell) ||
-    regime === 'SHORT_TERM_WARNING';
-  const hold = bullishRegime && !activeSellSignal && !stochRsi.probableBuy;
+      regime === 'CONFIRMED_BULLISH' ||
+      priceTrend.direction === 'IMPROVING');
+  const hold =
+    liquidityRegimeIsBullishOrNeutral &&
+    !activeSellSignal &&
+    !stochRsi.probableBuy;
 
-  let action: CompositeSignal['action'] = 'HOLD';
-  let explanationKey = 'composite.hold';
+  let action: CompositeSignal['action'] = 'CAUTION';
+  let explanationKey = 'composite.caution';
 
   if (confirmedSell) {
     action = 'CONFIRMED_SELL';
     explanationKey = 'composite.confirmedSell';
+  } else if (confirmedSellButTrendStrong) {
+    action = 'CAUTION';
+    explanationKey = 'composite.confirmedSellButTrendStrong';
   } else if (riskSell) {
     action = 'RISK_SELL';
     explanationKey = 'composite.riskSell';
-  } else if (strongBuy) {
-    action = 'STRONG_BUY';
-    explanationKey = 'composite.strongBuy';
   } else if (caution) {
     action = 'CAUTION';
     explanationKey = 'composite.caution';
+  } else if (strongBuy) {
+    action = 'STRONG_BUY';
+    explanationKey = 'composite.strongBuy';
   } else if (probableBuy) {
     action = 'PROBABLE_BUY';
     explanationKey = 'composite.probableBuy';
@@ -252,21 +301,33 @@ export const calculateCompositeSignal = (
     explanationKey = 'composite.hold';
   }
 
+  const stochPenalty = stochRsi.confirmedSell
+    ? -50
+    : stochRsi.riskSell
+      ? -25
+      : 0;
   const score = clampScore(
-    (buy.shortTerm ? 25 : 0) +
+    (buy.shortTerm ? 20 : 0) +
       (buy.midTerm ? 25 : 0) +
       (buy.longTerm ? 15 : 0) +
-      (stochRsi.probableBuy ? 25 : 0) -
-      (stochRsi.riskSell ? 25 : 0) -
-      (stochRsi.confirmedSell ? 35 : 0) -
+      (stochRsi.probableBuy ? 20 : 0) +
+      (priceTrend.direction === 'BULLISH' ? 20 : 0) +
+      (priceTrend.direction === 'IMPROVING' ? 10 : 0) +
+      stochPenalty -
       (regime === 'SHORT_TERM_WARNING' ? 20 : 0) -
-      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0)
+      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
+      (priceTrend.direction === 'BEARISH' ? 25 : 0) -
+      (priceTrend.direction === 'WEAKENING' ? 10 : 0)
   );
 
   return {
     action,
     score,
-    explanationKey
+    explanationKey,
+    scoreScale: {
+      min: -100,
+      max: 100
+    }
   };
 };
 
@@ -365,8 +426,9 @@ export const analyzeSymbolMetrics = (
     env.BUY_THRESHOLD_PERCENT
   );
   const stochRsi = calculateStochRsiAnalysis(rows, getStochRsiConfig());
-  const sell = calculateSellTimeframes(regime, buy, stochRsi);
-  const composite = calculateCompositeSignal(regime, buy, stochRsi);
+  const priceTrend = calculatePriceTrendAnalysis(rows, getPriceTrendConfig());
+  const sell = calculateSellTimeframes(regime, buy, stochRsi, priceTrend);
+  const composite = calculateCompositeSignal(regime, buy, stochRsi, priceTrend);
 
   return {
     status: 'OK',
@@ -404,6 +466,7 @@ export const analyzeSymbolMetrics = (
       buy,
       sell,
       stochRsi,
+      priceTrend,
       composite
     },
     persianSummary: buildPersianSummary(
@@ -412,7 +475,8 @@ export const analyzeSymbolMetrics = (
       confidence,
       buy,
       stochRsi,
-      composite
+      composite,
+      priceTrend
     ),
     disclaimer: analysisDisclaimer
   };

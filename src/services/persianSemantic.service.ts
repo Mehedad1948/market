@@ -3,6 +3,7 @@ import type {
   AnalysisRegime,
   BuyTimeframes,
   CompositeSignal,
+  PriceTrendAnalysis,
   StochRsiAnalysis
 } from '../types';
 
@@ -26,13 +27,14 @@ const baseMessageByRegime: Record<AnalysisRegime, string> = {
 
 const compositeMessageByAction: Record<CompositeSignal['action'], string> = {
   STRONG_BUY:
-    'جمع‌بندی سیستم: شرایط خرید قوی از نظر نقدینگی و مومنتوم فعال است.',
+    'جمع‌بندی سیستم: شرایط خرید قوی از نظر نقدینگی، مومنتوم و روند قیمت فعال است.',
   PROBABLE_BUY:
-    'جمع‌بندی سیستم: شرایط خرید احتمالی فعال است، اما نیاز به مدیریت ریسک دارد.',
-  HOLD: 'جمع‌بندی سیستم: نگهداری/ادامه همراهی با روند، بدون سیگنال تازه خرید یا فروش.',
+    'جمع‌بندی سیستم: شرایط خرید احتمالی فعال است، اما برای ورود باید مدیریت ریسک و حد ضرر رعایت شود.',
+  HOLD: 'جمع‌بندی سیستم: وضعیت فعلی بیشتر مناسب نگهداری یا نظارت است و سیگنال قوی جدید برای ورود یا خروج دیده نمی‌شود.',
   CAUTION:
-    'جمع‌بندی سیستم: احتیاط؛ نشانه‌هایی از ضعف یا ریسک کوتاه‌مدت دیده می‌شود.',
-  RISK_SELL: 'جمع‌بندی سیستم: هشدار فروش/کاهش ریسک فعال شده است.',
+    'جمع‌بندی سیستم: احتیاط؛ برخی نشانه‌های ضعف یا ریسک کوتاه‌مدت مشاهده می‌شود.',
+  RISK_SELL:
+    'جمع‌بندی سیستم: هشدار کاهش ریسک فعال شده است و بهتر است رفتار قیمت و خروج نقدینگی با دقت بررسی شود.',
   CONFIRMED_SELL: 'جمع‌بندی سیستم: سیگنال خروج یا کاهش جدی ریسک تأیید شده است.'
 };
 
@@ -74,13 +76,54 @@ const generateStochRsiPersianSummary = (
   return null;
 };
 
+const generatePriceTrendPersianSummary = (
+  priceTrend?: PriceTrendAnalysis
+): string | null => {
+  if (!priceTrend || priceTrend.status === 'INSUFFICIENT_DATA') {
+    return 'برای ارزیابی روند قیمت، داده کافی در دسترس نیست.';
+  }
+
+  if (priceTrend.direction === 'BULLISH') {
+    return 'روند قیمت نیز صعودی ارزیابی می‌شود؛ قیمت بالاتر از میانگین‌های مهم قرار دارد و ساختار میانگین‌ها مثبت است.';
+  }
+
+  if (priceTrend.direction === 'IMPROVING') {
+    return 'روند قیمت در حال بهبود است، اما هنوز تأیید کامل صعودی از نظر ساختار میانگین‌ها شکل نگرفته است.';
+  }
+
+  if (priceTrend.direction === 'WEAKENING') {
+    return 'در روند قیمت نشانه‌هایی از ضعف کوتاه‌مدت دیده می‌شود و قیمت نسبت به میانگین کوتاه‌مدت حساس شده است.';
+  }
+
+  if (priceTrend.direction === 'BEARISH') {
+    return 'روند قیمت نزولی ارزیابی می‌شود و قیمت پایین‌تر از میانگین‌های مهم قرار دارد.';
+  }
+
+  return null;
+};
+
+const generateCompositePersianSummary = (
+  composite?: CompositeSignal
+): string | null => {
+  if (!composite) {
+    return null;
+  }
+
+  if (composite.explanationKey === 'composite.confirmedSellButTrendStrong') {
+    return 'در Stoch RSI هشدار خروج دیده می‌شود، اما چون روند اصلی و نقدینگی هنوز کاملاً تضعیف نشده‌اند، این وضعیت بیشتر به‌عنوان احتیاط و مدیریت ریسک در نظر گرفته می‌شود، نه الزاماً خروج کامل.';
+  }
+
+  return compositeMessageByAction[composite.action];
+};
+
 export const buildPersianSummary = (
   symbol: string,
   regime: AnalysisRegime,
   confidence?: AnalysisConfidence,
   buy?: BuyTimeframes,
   stochRsi?: StochRsiAnalysis,
-  composite?: CompositeSignal
+  composite?: CompositeSignal,
+  priceTrend?: PriceTrendAnalysis
 ): string => {
   const message = baseMessageByRegime[regime].replace('{symbol}', symbol);
   const parts = [message];
@@ -98,8 +141,14 @@ export const buildPersianSummary = (
     parts.push(stochRsiMessage);
   }
 
-  if (composite) {
-    parts.push(compositeMessageByAction[composite.action]);
+  const priceTrendMessage = generatePriceTrendPersianSummary(priceTrend);
+  if (priceTrendMessage) {
+    parts.push(priceTrendMessage);
+  }
+
+  const compositeMessage = generateCompositePersianSummary(composite);
+  if (compositeMessage) {
+    parts.push(compositeMessage);
   }
 
   parts.push(DISCLAIMER);

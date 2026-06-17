@@ -123,6 +123,10 @@ export type CompositeSignal = {
   action: CompositeSignalAction;
   score: number;
   explanationKey: string;
+  scoreScale: {
+    min: -100;
+    max: 100;
+  };
 };
 
 export type StochRsiConfig = {
@@ -136,6 +140,45 @@ export type StochRsiConfig = {
   buyLookback: number;
   signalMaxAge: number;
   minCrossDistance: number;
+};
+
+export type PriceMaType = 'EMA' | 'SMA';
+
+export type PriceTrendDirection =
+  | 'BULLISH'
+  | 'IMPROVING'
+  | 'NEUTRAL'
+  | 'WEAKENING'
+  | 'BEARISH'
+  | 'INSUFFICIENT_DATA';
+
+export type PriceTrendAnalysis = {
+  status: 'OK' | 'INSUFFICIENT_DATA';
+  latestDate: string | null;
+  latestClosePrice: number | null;
+  fastMa: number | null;
+  midMa: number | null;
+  longMa: number | null;
+  fastSlope: number | null;
+  midSlope: number | null;
+  longSlope: number | null;
+  closeAboveFastMa: boolean;
+  closeAboveMidMa: boolean;
+  closeAboveLongMa: boolean;
+  fastAboveMidMa: boolean;
+  midAboveLongMa: boolean;
+  direction: PriceTrendDirection;
+  bullish: boolean;
+  bearish: boolean;
+  warning: boolean;
+};
+
+export type PriceTrendConfig = {
+  fastWindow: number;
+  midWindow: number;
+  longWindow: number;
+  maType: PriceMaType;
+  minSlope: number;
 };
 
 export type AnalysisRegime =
@@ -182,6 +225,7 @@ export type StockAnalysisResult = {
     buy: BuyTimeframes;
     sell: SellTimeframes;
     stochRsi: StochRsiAnalysis;
+    priceTrend: PriceTrendAnalysis;
     composite: CompositeSignal;
   };
   persianSummary: string;

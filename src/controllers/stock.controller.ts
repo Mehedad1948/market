@@ -7,7 +7,7 @@ import { symbolRepository } from '../repositories/symbol.repository';
 import { analysisCacheRepository } from '../repositories/analysisCache.repository';
 import {
   analyzeSymbolMetrics,
-  getStochRsiConfig
+  buildAnalysisConfigForCache
 } from '../services/analysis.service';
 import { symbolDataService } from '../services/symbolData.service';
 import { createHash } from '../utils/hash';
@@ -132,7 +132,7 @@ export const getStockAnalysis = async (
     monthlyWindow: params.monthlyWindow,
     quarterlyWindow: params.quarterlyWindow,
     includeRealLegal: params.includeRealLegal,
-    stochRsi: getStochRsiConfig()
+    analysisConfig: buildAnalysisConfigForCache()
   });
 
   const activeCache = await analysisCacheRepository.getActiveCache(

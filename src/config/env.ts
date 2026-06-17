@@ -27,6 +27,22 @@ const envSchema = z.object({
   STOCH_RSI_BUY_LOOKBACK: z.coerce.number().int().positive().default(6),
   STOCH_RSI_SIGNAL_MAX_AGE: z.coerce.number().int().nonnegative().default(3),
   STOCH_RSI_MIN_CROSS_DISTANCE: z.coerce.number().nonnegative().default(1),
+  PRICE_FAST_MA_WINDOW: z.coerce.number().int().positive().default(20),
+  PRICE_MID_MA_WINDOW: z.coerce.number().int().positive().default(50),
+  PRICE_LONG_MA_WINDOW: z.coerce.number().int().positive().default(200),
+  PRICE_MA_TYPE: z
+    .preprocess(
+      (value) =>
+        String(value ?? 'EMA')
+          .trim()
+          .toUpperCase() === 'EMA'
+          ? 'EMA'
+          : 'SMA',
+      z.enum(['EMA', 'SMA'])
+    )
+    .default('EMA'),
+  PRICE_TREND_MIN_SLOPE: z.coerce.number().default(0),
+  COMPOSITE_SCORING_VERSION: z.coerce.number().int().positive().default(2),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(60)
 });
