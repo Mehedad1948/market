@@ -1,7 +1,13 @@
-import type { AnalysisConfidence, AnalysisRegime, BuyTimeframes } from '../types';
+import type {
+  AnalysisConfidence,
+  AnalysisRegime,
+  BuyTimeframes,
+  CompositeSignal,
+  StochRsiAnalysis
+} from '../types';
 
 const DISCLAIMER =
-  'این تحلیل صرفاً توصیف وضعیت ارزش معاملات است و توصیه خرید یا فروش محسوب نمی‌شود.';
+  'این تحلیل صرفاً خروجی یک سیستم تحلیلی است و توصیه خرید یا فروش محسوب نمی‌شود.';
 
 const baseMessageByRegime: Record<AnalysisRegime, string> = {
   STRONG_BULLISH_LIQUIDITY:
@@ -18,7 +24,21 @@ const baseMessageByRegime: Record<AnalysisRegime, string> = {
     'وضعیت ارزش معاملات {symbol} سیگنال واضحی از ورود یا خروج قدرتمند نقدینگی نشان نمی‌دهد. ساختار میانگین‌ها ترکیبی است و بهتر است تحلیل با روند قیمت، مقاومت‌ها، حمایت‌ها و وضعیت کلی بازار ترکیب شود.'
 };
 
-export const generateBuyTimeframePersianSummary = (buy: BuyTimeframes): string => {
+const compositeMessageByAction: Record<CompositeSignal['action'], string> = {
+  STRONG_BUY:
+    'جمع‌بندی سیستم: شرایط خرید قوی از نظر نقدینگی و مومنتوم فعال است.',
+  PROBABLE_BUY:
+    'جمع‌بندی سیستم: شرایط خرید احتمالی فعال است، اما نیاز به مدیریت ریسک دارد.',
+  HOLD: 'جمع‌بندی سیستم: نگهداری/ادامه همراهی با روند، بدون سیگنال تازه خرید یا فروش.',
+  CAUTION:
+    'جمع‌بندی سیستم: احتیاط؛ نشانه‌هایی از ضعف یا ریسک کوتاه‌مدت دیده می‌شود.',
+  RISK_SELL: 'جمع‌بندی سیستم: هشدار فروش/کاهش ریسک فعال شده است.',
+  CONFIRMED_SELL: 'جمع‌بندی سیستم: سیگنال خروج یا کاهش جدی ریسک تأیید شده است.'
+};
+
+export const generateBuyTimeframePersianSummary = (
+  buy: BuyTimeframes
+): string => {
   const active: string[] = [];
 
   if (buy.shortTerm) active.push('کوتاه‌مدت');
@@ -29,14 +49,38 @@ export const generateBuyTimeframePersianSummary = (buy: BuyTimeframes): string =
     return 'در حال حاضر هیچ‌کدام از شروط خرید مبتنی بر ارزش معاملات فعال نیست.';
   }
 
-  return `شروط خرید مبتنی بر ارزش معاملات در بازه‌های ${active.join('، ')} فعال است.`;
+  return `شرط‌های خرید مبتنی بر ارزش معاملات در بازه‌های ${active.join('، ')} فعال است.`;
+};
+
+const generateStochRsiPersianSummary = (
+  stochRsi?: StochRsiAnalysis
+): string | null => {
+  if (!stochRsi || stochRsi.status === 'INSUFFICIENT_DATA') {
+    return 'برای محاسبه Stoch RSI داده کافی در دسترس نیست.';
+  }
+
+  if (stochRsi.confirmedSell) {
+    return 'با خروج نزولی Stoch RSI از ناحیه قرمز، ریسک اصلاح یا کاهش مومنتوم افزایش یافته است.';
+  }
+
+  if (stochRsi.riskSell) {
+    return 'در اندیکاتور Stoch RSI، کراس نزولی در ناحیه قرمز مشاهده شده و به‌عنوان هشدار احتیاط در نظر گرفته می‌شود.';
+  }
+
+  if (stochRsi.probableBuy) {
+    return 'در اندیکاتور Stoch RSI، کراس رو به بالا در ناحیه سبز مشاهده شده که می‌تواند نشانه شروع بهبود مومنتوم باشد.';
+  }
+
+  return null;
 };
 
 export const buildPersianSummary = (
   symbol: string,
   regime: AnalysisRegime,
   confidence?: AnalysisConfidence,
-  buy?: BuyTimeframes
+  buy?: BuyTimeframes,
+  stochRsi?: StochRsiAnalysis,
+  composite?: CompositeSignal
 ): string => {
   const message = baseMessageByRegime[regime].replace('{symbol}', symbol);
   const parts = [message];
@@ -47,6 +91,15 @@ export const buildPersianSummary = (
 
   if (buy) {
     parts.push(generateBuyTimeframePersianSummary(buy));
+  }
+
+  const stochRsiMessage = generateStochRsiPersianSummary(stochRsi);
+  if (stochRsiMessage) {
+    parts.push(stochRsiMessage);
+  }
+
+  if (composite) {
+    parts.push(compositeMessageByAction[composite.action]);
   }
 
   parts.push(DISCLAIMER);

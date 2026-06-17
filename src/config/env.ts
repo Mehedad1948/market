@@ -17,6 +17,16 @@ const envSchema = z.object({
   DEFAULT_MONTHLY_WINDOW: z.coerce.number().int().positive().default(30),
   DEFAULT_QUARTERLY_WINDOW: z.coerce.number().int().positive().default(90),
   BUY_THRESHOLD_PERCENT: z.coerce.number().positive().default(0.02),
+  STOCH_RSI_RSI_LENGTH: z.coerce.number().int().positive().default(14),
+  STOCH_RSI_STOCH_LENGTH: z.coerce.number().int().positive().default(14),
+  STOCH_RSI_K_SMOOTH: z.coerce.number().int().positive().default(5),
+  STOCH_RSI_D_SMOOTH: z.coerce.number().int().positive().default(5),
+  STOCH_RSI_UPPER: z.coerce.number().min(0).max(100).default(80),
+  STOCH_RSI_LOWER: z.coerce.number().min(0).max(100).default(20),
+  STOCH_RSI_SELL_LOOKBACK: z.coerce.number().int().positive().default(12),
+  STOCH_RSI_BUY_LOOKBACK: z.coerce.number().int().positive().default(6),
+  STOCH_RSI_SIGNAL_MAX_AGE: z.coerce.number().int().nonnegative().default(3),
+  STOCH_RSI_MIN_CROSS_DISTANCE: z.coerce.number().nonnegative().default(1),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(60)
 });

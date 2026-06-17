@@ -3,10 +3,14 @@ import type { SymbolDailyMetric } from '@prisma/client';
 import { env } from '../config/env';
 import type {
   AnalysisConfidence,
+  CompositeSignal,
   AnalysisRegime,
   BuyTimeframes,
   LiquidityMetrics,
   MovingAverageAnalysis,
+  SellTimeframes,
+  StochRsiAnalysis,
+  StochRsiConfig,
   StockAnalysisResult,
   SymbolAnalysisParams
 } from '../types';
@@ -17,7 +21,11 @@ import {
   detectCrossAbove,
   detectCrossBelow
 } from './movingAverage.service';
-import { analysisDisclaimer, buildPersianSummary } from './persianSemantic.service';
+import {
+  analysisDisclaimer,
+  buildPersianSummary
+} from './persianSemantic.service';
+import { calculateStochRsiAnalysis } from './stochRsi.service';
 
 const toNumber = (value: { toString(): string } | null): number | null => {
   return value === null ? null : Number(value.toString());
@@ -105,21 +113,36 @@ export const calculateConfidence = (
   metrics: MovingAverageAnalysis
 ): AnalysisConfidence => {
   const bullishOrder =
-    metrics.maWeekly > metrics.maMonthly && metrics.maMonthly > metrics.maQuarterly;
+    metrics.maWeekly > metrics.maMonthly &&
+    metrics.maMonthly > metrics.maQuarterly;
   const bearishOrder =
-    metrics.maWeekly < metrics.maMonthly && metrics.maMonthly < metrics.maQuarterly;
+    metrics.maWeekly < metrics.maMonthly &&
+    metrics.maMonthly < metrics.maQuarterly;
   const positiveSlopes =
-    metrics.weeklySlope > 0 && metrics.monthlySlope > 0 && metrics.quarterlySlope >= 0;
+    metrics.weeklySlope > 0 &&
+    metrics.monthlySlope > 0 &&
+    metrics.quarterlySlope >= 0;
   const negativeSlopes =
-    metrics.weeklySlope < 0 && metrics.monthlySlope < 0 && metrics.quarterlySlope <= 0;
+    metrics.weeklySlope < 0 &&
+    metrics.monthlySlope < 0 &&
+    metrics.quarterlySlope <= 0;
   const hasBullishCross =
     metrics.crossWeeklyAboveMonthly || metrics.crossMonthlyAboveQuarterly;
-  const hasBearishCross = metrics.crossWeeklyBelowMonthly || metrics.crossMonthlyBelowQuarterly;
+  const hasBearishCross =
+    metrics.crossWeeklyBelowMonthly || metrics.crossMonthlyBelowQuarterly;
 
   if (
-    (regime === 'STRONG_BULLISH_LIQUIDITY' && bullishOrder && positiveSlopes && hasBullishCross) ||
-    (regime === 'BEARISH_LIQUIDITY' && bearishOrder && negativeSlopes && hasBearishCross) ||
-    (regime === 'CONFIRMED_BULLISH' && metrics.crossMonthlyAboveQuarterly && metrics.monthlySlope > 0)
+    (regime === 'STRONG_BULLISH_LIQUIDITY' &&
+      bullishOrder &&
+      positiveSlopes &&
+      hasBullishCross) ||
+    (regime === 'BEARISH_LIQUIDITY' &&
+      bearishOrder &&
+      negativeSlopes &&
+      hasBearishCross) ||
+    (regime === 'CONFIRMED_BULLISH' &&
+      metrics.crossMonthlyAboveQuarterly &&
+      metrics.monthlySlope > 0)
   ) {
     return 'HIGH';
   }
@@ -136,6 +159,115 @@ export const calculateConfidence = (
   }
 
   return 'LOW';
+};
+
+export const getStochRsiConfig = (): StochRsiConfig => {
+  return {
+    rsiLength: env.STOCH_RSI_RSI_LENGTH,
+    stochLength: env.STOCH_RSI_STOCH_LENGTH,
+    kSmooth: env.STOCH_RSI_K_SMOOTH,
+    dSmooth: env.STOCH_RSI_D_SMOOTH,
+    upper: env.STOCH_RSI_UPPER,
+    lower: env.STOCH_RSI_LOWER,
+    sellLookback: env.STOCH_RSI_SELL_LOOKBACK,
+    buyLookback: env.STOCH_RSI_BUY_LOOKBACK,
+    signalMaxAge: env.STOCH_RSI_SIGNAL_MAX_AGE,
+    minCrossDistance: env.STOCH_RSI_MIN_CROSS_DISTANCE
+  };
+};
+
+export const calculateSellTimeframes = (
+  regime: AnalysisRegime,
+  buy: BuyTimeframes,
+  stochRsi: StochRsiAnalysis
+): SellTimeframes => {
+  return {
+    shortTerm: stochRsi.riskSell || regime === 'SHORT_TERM_WARNING',
+    midTerm:
+      stochRsi.confirmedSell &&
+      (regime === 'SHORT_TERM_WARNING' ||
+        regime === 'BEARISH_LIQUIDITY' ||
+        !buy.midTerm),
+    longTerm: regime === 'BEARISH_LIQUIDITY' && stochRsi.confirmedSell
+  };
+};
+
+const clampScore = (score: number): number => {
+  return Math.max(-100, Math.min(100, score));
+};
+
+export const calculateCompositeSignal = (
+  regime: AnalysisRegime,
+  buy: BuyTimeframes,
+  stochRsi: StochRsiAnalysis
+): CompositeSignal => {
+  const activeSellSignal = stochRsi.riskSell || stochRsi.confirmedSell;
+  const bullishRegime =
+    regime === 'STRONG_BULLISH_LIQUIDITY' ||
+    regime === 'EARLY_BULLISH' ||
+    regime === 'CONFIRMED_BULLISH';
+  const strongBuy =
+    stochRsi.probableBuy &&
+    buy.shortTerm &&
+    buy.midTerm &&
+    regime !== 'BEARISH_LIQUIDITY' &&
+    !stochRsi.confirmedSell;
+  const probableBuy =
+    stochRsi.probableBuy &&
+    regime !== 'BEARISH_LIQUIDITY' &&
+    (buy.shortTerm ||
+      regime === 'EARLY_BULLISH' ||
+      regime === 'CONFIRMED_BULLISH');
+  const confirmedSell =
+    stochRsi.confirmedSell &&
+    (regime === 'SHORT_TERM_WARNING' ||
+      regime === 'BEARISH_LIQUIDITY' ||
+      !buy.midTerm);
+  const riskSell = stochRsi.riskSell && !buy.shortTerm;
+  const caution =
+    (stochRsi.riskSell && !stochRsi.confirmedSell) ||
+    regime === 'SHORT_TERM_WARNING';
+  const hold = bullishRegime && !activeSellSignal && !stochRsi.probableBuy;
+
+  let action: CompositeSignal['action'] = 'HOLD';
+  let explanationKey = 'composite.hold';
+
+  if (confirmedSell) {
+    action = 'CONFIRMED_SELL';
+    explanationKey = 'composite.confirmedSell';
+  } else if (riskSell) {
+    action = 'RISK_SELL';
+    explanationKey = 'composite.riskSell';
+  } else if (strongBuy) {
+    action = 'STRONG_BUY';
+    explanationKey = 'composite.strongBuy';
+  } else if (caution) {
+    action = 'CAUTION';
+    explanationKey = 'composite.caution';
+  } else if (probableBuy) {
+    action = 'PROBABLE_BUY';
+    explanationKey = 'composite.probableBuy';
+  } else if (hold) {
+    action = 'HOLD';
+    explanationKey = 'composite.hold';
+  }
+
+  const score = clampScore(
+    (buy.shortTerm ? 25 : 0) +
+      (buy.midTerm ? 25 : 0) +
+      (buy.longTerm ? 15 : 0) +
+      (stochRsi.probableBuy ? 25 : 0) -
+      (stochRsi.riskSell ? 25 : 0) -
+      (stochRsi.confirmedSell ? 35 : 0) -
+      (regime === 'SHORT_TERM_WARNING' ? 20 : 0) -
+      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0)
+  );
+
+  return {
+    action,
+    score,
+    explanationKey
+  };
 };
 
 export const analyzeSymbolMetrics = (
@@ -185,7 +317,10 @@ export const analyzeSymbolMetrics = (
     quarterlySlope: calculateSlope(quarterlySeries),
     crossWeeklyAboveMonthly: detectCrossAbove(weeklySeries, monthlySeries),
     crossWeeklyBelowMonthly: detectCrossBelow(weeklySeries, monthlySeries),
-    crossMonthlyAboveQuarterly: detectCrossAbove(monthlySeries, quarterlySeries),
+    crossMonthlyAboveQuarterly: detectCrossAbove(
+      monthlySeries,
+      quarterlySeries
+    ),
     crossMonthlyBelowQuarterly: detectCrossBelow(monthlySeries, quarterlySeries)
   };
 
@@ -199,7 +334,9 @@ export const analyzeSymbolMetrics = (
 
   const latestTradeValue = toNumber(latestRow.tradeValue);
   const latestClosePrice = toNumber(latestRow.closePrice);
-  const latestClosePriceChangePercent = toNumber(latestRow.closePriceChangePercent);
+  const latestClosePriceChangePercent = toNumber(
+    latestRow.closePriceChangePercent
+  );
   const valueChangeVsMonthly =
     latestTradeValue !== null && movingAverageAnalysis.maMonthly !== 0
       ? round(
@@ -227,6 +364,9 @@ export const analyzeSymbolMetrics = (
     },
     env.BUY_THRESHOLD_PERCENT
   );
+  const stochRsi = calculateStochRsiAnalysis(rows, getStochRsiConfig());
+  const sell = calculateSellTimeframes(regime, buy, stochRsi);
+  const composite = calculateCompositeSignal(regime, buy, stochRsi);
 
   return {
     status: 'OK',
@@ -256,12 +396,24 @@ export const analyzeSymbolMetrics = (
       regime,
       crossWeeklyAboveMonthly: movingAverageAnalysis.crossWeeklyAboveMonthly,
       crossWeeklyBelowMonthly: movingAverageAnalysis.crossWeeklyBelowMonthly,
-      crossMonthlyAboveQuarterly: movingAverageAnalysis.crossMonthlyAboveQuarterly,
-      crossMonthlyBelowQuarterly: movingAverageAnalysis.crossMonthlyBelowQuarterly,
+      crossMonthlyAboveQuarterly:
+        movingAverageAnalysis.crossMonthlyAboveQuarterly,
+      crossMonthlyBelowQuarterly:
+        movingAverageAnalysis.crossMonthlyBelowQuarterly,
       confidence,
-      buy
+      buy,
+      sell,
+      stochRsi,
+      composite
     },
-    persianSummary: buildPersianSummary(symbol, regime, confidence, buy),
+    persianSummary: buildPersianSummary(
+      symbol,
+      regime,
+      confidence,
+      buy,
+      stochRsi,
+      composite
+    ),
     disclaimer: analysisDisclaimer
   };
 };

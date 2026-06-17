@@ -4,10 +4,32 @@ import { describe, expect, it } from 'vitest';
 import {
   analyzeSymbolMetrics,
   calculateBuyTimeframes,
+  calculateCompositeSignal,
   calculateConfidence,
+  calculateSellTimeframes,
   classifyRegime,
   isAboveBy
 } from '../src/services/analysis.service';
+import type { StochRsiAnalysis } from '../src/types';
+
+const baseStochRsi: StochRsiAnalysis = {
+  status: 'OK',
+  latestDate: '1403-01-13',
+  latestK: 50,
+  latestD: 45,
+  latestZone: 'NEUTRAL',
+  upperThreshold: 80,
+  lowerThreshold: 20,
+  crossUpInGreen: false,
+  crossDownInRed: false,
+  redBearishCrossCount: 0,
+  greenBullishCrossCount: 0,
+  barsSinceLastGreenCrossUp: null,
+  barsSinceLastRedCrossDown: null,
+  probableBuy: false,
+  riskSell: false,
+  confirmedSell: false
+};
 
 describe('analysis.service', () => {
   it('classifies strong bullish liquidity', () => {
@@ -176,8 +198,91 @@ describe('analysis.service', () => {
         shortTerm: expect.any(Boolean),
         midTerm: expect.any(Boolean),
         longTerm: expect.any(Boolean)
+      },
+      sell: {
+        shortTerm: expect.any(Boolean),
+        midTerm: expect.any(Boolean),
+        longTerm: expect.any(Boolean)
+      },
+      stochRsi: {
+        status: expect.any(String),
+        probableBuy: expect.any(Boolean),
+        riskSell: expect.any(Boolean),
+        confirmedSell: expect.any(Boolean)
+      },
+      composite: {
+        action: expect.any(String),
+        score: expect.any(Number),
+        explanationKey: expect.any(String)
       }
     });
     expect('bullish' in result.signals).toBe(false);
+  });
+
+  it('composite action becomes PROBABLE_BUY when Stoch RSI buy exists and liquidity is not bearish', () => {
+    const composite = calculateCompositeSignal(
+      'EARLY_BULLISH',
+      {
+        shortTerm: true,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        probableBuy: true,
+        greenBullishCrossCount: 1,
+        crossUpInGreen: true
+      }
+    );
+
+    expect(composite.action).toBe('PROBABLE_BUY');
+    expect(composite.score).toBeGreaterThan(0);
+  });
+
+  it('composite action becomes CONFIRMED_SELL when confirmedSell exists and liquidity is weak', () => {
+    const composite = calculateCompositeSignal(
+      'BEARISH_LIQUIDITY',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        latestK: 40,
+        latestD: 60,
+        riskSell: true,
+        confirmedSell: true,
+        redBearishCrossCount: 2,
+        crossDownInRed: true
+      }
+    );
+
+    expect(composite.action).toBe('CONFIRMED_SELL');
+    expect(composite.score).toBeLessThan(0);
+  });
+
+  it('existing liquidity signals still work alongside sell timeframes', () => {
+    const buy = calculateBuyTimeframes({
+      latestTradeValue: 150,
+      maWeekly: 128,
+      maMonthly: 118,
+      maQuarterly: 100,
+      weeklySlope: 0.04,
+      monthlySlope: 0.03,
+      quarterlySlope: 0.02
+    });
+    const sell = calculateSellTimeframes(
+      'STRONG_BULLISH_LIQUIDITY',
+      buy,
+      baseStochRsi
+    );
+
+    expect(buy.longTerm).toBe(true);
+    expect(sell).toEqual({
+      shortTerm: false,
+      midTerm: false,
+      longTerm: false
+    });
   });
 });

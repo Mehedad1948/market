@@ -24,6 +24,45 @@ describe('persianSemantic.service', () => {
     expect(summary).toContain('توصیه خرید یا فروش');
   });
 
+  it('mentions Stoch RSI and composite conclusion when provided', () => {
+    const summary = buildPersianSummary(
+      'فملی',
+      'NEUTRAL',
+      'MEDIUM',
+      {
+        shortTerm: true,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        status: 'OK',
+        latestDate: '1403-01-13',
+        latestK: 15,
+        latestD: 10,
+        latestZone: 'GREEN',
+        upperThreshold: 80,
+        lowerThreshold: 20,
+        crossUpInGreen: true,
+        crossDownInRed: false,
+        redBearishCrossCount: 0,
+        greenBullishCrossCount: 1,
+        barsSinceLastGreenCrossUp: 1,
+        barsSinceLastRedCrossDown: null,
+        probableBuy: true,
+        riskSell: false,
+        confirmedSell: false
+      },
+      {
+        action: 'PROBABLE_BUY',
+        score: 50,
+        explanationKey: 'composite.probableBuy'
+      }
+    );
+
+    expect(summary).toContain('Stoch RSI');
+    expect(summary).toContain('خرید احتمالی');
+  });
+
   it('returns a fallback sentence when no buy conditions are active', () => {
     const summary = generateBuyTimeframePersianSummary({
       shortTerm: false,

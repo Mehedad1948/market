@@ -5,7 +5,10 @@ import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import { symbolRepository } from '../repositories/symbol.repository';
 import { analysisCacheRepository } from '../repositories/analysisCache.repository';
-import { analyzeSymbolMetrics } from '../services/analysis.service';
+import {
+  analyzeSymbolMetrics,
+  getStochRsiConfig
+} from '../services/analysis.service';
 import { symbolDataService } from '../services/symbolData.service';
 import { createHash } from '../utils/hash';
 import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
@@ -28,14 +31,31 @@ const decodeSymbol = (rawSymbol: string): string => {
 
 const analysisQuerySchema = z
   .object({
-    weeklyWindow: z.coerce.number().int().positive().default(env.DEFAULT_WEEKLY_WINDOW),
-    monthlyWindow: z.coerce.number().int().positive().default(env.DEFAULT_MONTHLY_WINDOW),
-    quarterlyWindow: z.coerce.number().int().positive().default(env.DEFAULT_QUARTERLY_WINDOW),
+    weeklyWindow: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(env.DEFAULT_WEEKLY_WINDOW),
+    monthlyWindow: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(env.DEFAULT_MONTHLY_WINDOW),
+    quarterlyWindow: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(env.DEFAULT_QUARTERLY_WINDOW),
     forceRefresh: z.coerce.boolean().default(false),
     includeRealLegal: z.coerce.boolean().default(false)
   })
   .superRefine((value, ctx) => {
-    if (!(value.weeklyWindow < value.monthlyWindow && value.monthlyWindow < value.quarterlyWindow)) {
+    if (
+      !(
+        value.weeklyWindow < value.monthlyWindow &&
+        value.monthlyWindow < value.quarterlyWindow
+      )
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'weeklyWindow < monthlyWindow < quarterlyWindow must hold.'
@@ -75,31 +95,44 @@ const persistRequestLog = async (
   });
 };
 
-export const getStockAnalysis = async (request: Request, response: Response) => {
+export const getStockAnalysis = async (
+  request: Request,
+  response: Response
+) => {
   const symbol = decodeSymbol(getRouteSymbol(request.params.symbol));
   if (!symbol) {
-    throw new AppError('نماد معتبر نیست.', 400, { englishMessage: 'Invalid symbol' });
+    throw new AppError('نماد معتبر نیست.', 400, {
+      englishMessage: 'Invalid symbol'
+    });
   }
 
-  const params = analysisQuerySchema.parse(request.query) as SymbolAnalysisParams;
+  const params = analysisQuerySchema.parse(
+    request.query
+  ) as SymbolAnalysisParams;
   let history = await symbolRepository.getSymbolHistory(symbol);
   const shouldRefresh = params.forceRefresh || history.length === 0;
 
   if (shouldRefresh) {
-    await symbolDataService.refreshSymbolHistory(symbol, params.includeRealLegal);
+    await symbolDataService.refreshSymbolHistory(
+      symbol,
+      params.includeRealLegal
+    );
     history = await symbolRepository.getSymbolHistory(symbol);
   }
 
   const latestDataDate = history.at(-1)?.date;
   if (!latestDataDate) {
-    throw new AppError('داده‌ای برای نماد یافت نشد.', 404, { englishMessage: 'No symbol data found' });
+    throw new AppError('داده‌ای برای نماد یافت نشد.', 404, {
+      englishMessage: 'No symbol data found'
+    });
   }
 
   const paramsHash = createHash({
     weeklyWindow: params.weeklyWindow,
     monthlyWindow: params.monthlyWindow,
     quarterlyWindow: params.quarterlyWindow,
-    includeRealLegal: params.includeRealLegal
+    includeRealLegal: params.includeRealLegal,
+    stochRsi: getStochRsiConfig()
   });
 
   const activeCache = await analysisCacheRepository.getActiveCache(
@@ -114,7 +147,14 @@ export const getStockAnalysis = async (request: Request, response: Response) => 
       ...cachedResult,
       cacheHit: true
     };
-    await persistRequestLog(request, symbol, params, true, cachedResult.source, cachedResult.status);
+    await persistRequestLog(
+      request,
+      symbol,
+      params,
+      true,
+      cachedResult.source,
+      cachedResult.status
+    );
     response.json(finalResult);
     return;
   }
@@ -128,20 +168,41 @@ export const getStockAnalysis = async (request: Request, response: Response) => 
   );
 
   const expiresAt = new Date(Date.now() + env.CACHE_TTL_SECONDS * 1000);
-  await analysisCacheRepository.saveCache(symbol, paramsHash, latestDataDate, result, expiresAt);
-  await persistRequestLog(request, symbol, params, false, result.source, result.status);
+  await analysisCacheRepository.saveCache(
+    symbol,
+    paramsHash,
+    latestDataDate,
+    result,
+    expiresAt
+  );
+  await persistRequestLog(
+    request,
+    symbol,
+    params,
+    false,
+    result.source,
+    result.status
+  );
 
   response.json(result);
 };
 
-export const refreshStockHistory = async (request: Request, response: Response) => {
+export const refreshStockHistory = async (
+  request: Request,
+  response: Response
+) => {
   const symbol = decodeSymbol(getRouteSymbol(request.params.symbol));
   if (!symbol) {
-    throw new AppError('نماد معتبر نیست.', 400, { englishMessage: 'Invalid symbol' });
+    throw new AppError('نماد معتبر نیست.', 400, {
+      englishMessage: 'Invalid symbol'
+    });
   }
 
   const body = refreshBodySchema.parse(request.body ?? {});
-  const refreshResult = await symbolDataService.refreshSymbolHistory(symbol, body.includeRealLegal);
+  const refreshResult = await symbolDataService.refreshSymbolHistory(
+    symbol,
+    body.includeRealLegal
+  );
   const latest = await symbolRepository.getLatestMetric(symbol);
 
   response.json({
@@ -158,7 +219,11 @@ export const getStockHistory = async (request: Request, response: Response) => {
   const symbol = decodeSymbol(getRouteSymbol(request.params.symbol));
   const query = historyQuerySchema.parse(request.query);
 
-  const rows = await symbolRepository.getPaginatedHistory(symbol, query.limit, query.offset);
+  const rows = await symbolRepository.getPaginatedHistory(
+    symbol,
+    query.limit,
+    query.offset
+  );
   response.json({
     status: 'OK',
     symbol,
@@ -168,12 +233,17 @@ export const getStockHistory = async (request: Request, response: Response) => {
   });
 };
 
-export const getLatestStockMetric = async (request: Request, response: Response) => {
+export const getLatestStockMetric = async (
+  request: Request,
+  response: Response
+) => {
   const symbol = decodeSymbol(getRouteSymbol(request.params.symbol));
   const row = await symbolRepository.getLatestMetric(symbol);
 
   if (!row) {
-    throw new AppError('داده‌ای برای نماد یافت نشد.', 404, { englishMessage: 'No symbol data found' });
+    throw new AppError('داده‌ای برای نماد یافت نشد.', 404, {
+      englishMessage: 'No symbol data found'
+    });
   }
 
   response.json({

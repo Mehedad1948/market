@@ -69,6 +69,75 @@ export type BuyTimeframes = {
   longTerm: boolean;
 };
 
+export type SellTimeframes = {
+  shortTerm: boolean;
+  midTerm: boolean;
+  longTerm: boolean;
+};
+
+export type StochRsiZone = 'RED' | 'GREEN' | 'NEUTRAL' | 'UNKNOWN';
+
+export type StochRsiPoint = {
+  date: string;
+  rsi: number | null;
+  stochRsi: number | null;
+  k: number | null;
+  d: number | null;
+  zone: StochRsiZone;
+  crossUp: boolean;
+  crossDown: boolean;
+  crossUpInGreen: boolean;
+  crossDownInRed: boolean;
+};
+
+export type StochRsiAnalysisStatus = 'OK' | 'INSUFFICIENT_DATA';
+
+export type StochRsiAnalysis = {
+  status: StochRsiAnalysisStatus;
+  latestDate: string | null;
+  latestK: number | null;
+  latestD: number | null;
+  latestZone: StochRsiZone;
+  upperThreshold: number;
+  lowerThreshold: number;
+  crossUpInGreen: boolean;
+  crossDownInRed: boolean;
+  redBearishCrossCount: number;
+  greenBullishCrossCount: number;
+  barsSinceLastGreenCrossUp: number | null;
+  barsSinceLastRedCrossDown: number | null;
+  probableBuy: boolean;
+  riskSell: boolean;
+  confirmedSell: boolean;
+};
+
+export type CompositeSignalAction =
+  | 'STRONG_BUY'
+  | 'PROBABLE_BUY'
+  | 'HOLD'
+  | 'CAUTION'
+  | 'RISK_SELL'
+  | 'CONFIRMED_SELL';
+
+export type CompositeSignal = {
+  action: CompositeSignalAction;
+  score: number;
+  explanationKey: string;
+};
+
+export type StochRsiConfig = {
+  rsiLength: number;
+  stochLength: number;
+  kSmooth: number;
+  dSmooth: number;
+  upper: number;
+  lower: number;
+  sellLookback: number;
+  buyLookback: number;
+  signalMaxAge: number;
+  minCrossDistance: number;
+};
+
 export type AnalysisRegime =
   | 'STRONG_BULLISH_LIQUIDITY'
   | 'EARLY_BULLISH'
@@ -111,6 +180,9 @@ export type StockAnalysisResult = {
     crossMonthlyBelowQuarterly: boolean;
     confidence: AnalysisConfidence;
     buy: BuyTimeframes;
+    sell: SellTimeframes;
+    stochRsi: StochRsiAnalysis;
+    composite: CompositeSignal;
   };
   persianSummary: string;
   disclaimer: string;
