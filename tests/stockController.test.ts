@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { isHistoryStale } from '../src/controllers/stock.controller';
+import { Prisma } from '@prisma/client';
+
+import {
+  isDatabaseUnavailableError,
+  isHistoryStale
+} from '../src/controllers/stock.controller';
 
 describe('stock.controller history freshness', () => {
   it('treats empty history as stale', () => {
@@ -32,3 +37,17 @@ describe('stock.controller history freshness', () => {
   });
 });
 
+describe('stock.controller database fallback helpers', () => {
+  it('recognizes Prisma database errors as database-unavailable cases', () => {
+    const error = new Prisma.PrismaClientInitializationError(
+      'Database init failed',
+      'clientVersion'
+    );
+
+    expect(isDatabaseUnavailableError(error)).toBe(true);
+  });
+
+  it('does not classify generic errors as database-unavailable cases', () => {
+    expect(isDatabaseUnavailableError(new Error('boom'))).toBe(false);
+  });
+});

@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma, SymbolDailyMetric } from '@prisma/client';
 
 import { brsClient } from './brsClient';
 import { symbolRepository } from '../repositories/symbol.repository';
@@ -59,14 +59,82 @@ const normalizeRealLegalRow = (
   };
 };
 
-export const symbolDataService = {
-  async refreshSymbolHistory(symbol: string, includeRealLegal: boolean) {
-    await symbolRepository.upsertSymbol(symbol);
+const buildTransientMetricRow = (
+  row: Prisma.SymbolDailyMetricUncheckedCreateInput,
+  index: number
+): SymbolDailyMetric => {
+  const now = new Date();
 
+  return {
+    id: `brs-${row.symbol}-${row.date}-${index}`,
+    symbol: row.symbol,
+    date: row.date,
+    time: row.time ?? null,
+    tradeCount: row.tradeCount ?? null,
+    tradeVolume: row.tradeVolume ?? null,
+    tradeValue: row.tradeValue ?? null,
+    priceMin: row.priceMin ?? null,
+    priceMax: row.priceMax ?? null,
+    priceYesterday: row.priceYesterday ?? null,
+    priceFirst: row.priceFirst ?? null,
+    priceLast: row.priceLast ?? null,
+    priceLastChange: row.priceLastChange ?? null,
+    priceLastChangePercent: row.priceLastChangePercent ?? null,
+    closePrice: row.closePrice ?? null,
+    closePriceChange: row.closePriceChange ?? null,
+    closePriceChangePercent: row.closePriceChangePercent ?? null,
+    rawJson: row.rawJson as Prisma.JsonValue,
+    createdAt: now,
+    updatedAt: now
+  } as unknown as SymbolDailyMetric;
+};
+
+export const symbolDataService = {
+  async fetchSymbolHistoryFromBrs(
+    symbol: string,
+    includeRealLegal: boolean
+  ): Promise<SymbolDailyMetric[]> {
     const tradeHistory = await brsClient.fetchTradeHistory(symbol);
     const normalizedTradeRows = tradeHistory
       .map((row) => normalizeTradeRow(symbol, row))
-      .filter((row): row is Prisma.SymbolDailyMetricUncheckedCreateInput => row !== null);
+      .filter(
+        (row): row is Prisma.SymbolDailyMetricUncheckedCreateInput =>
+          row !== null
+      );
+
+    void includeRealLegal;
+
+    return normalizedTradeRows.map((row, index) =>
+      buildTransientMetricRow(row, index)
+    );
+  },
+
+  async refreshSymbolHistory(symbol: string, includeRealLegal: boolean) {
+    await symbolRepository.upsertSymbol(symbol);
+
+    const transientRows = await this.fetchSymbolHistoryFromBrs(
+      symbol,
+      includeRealLegal
+    );
+    const normalizedTradeRows = transientRows.map((row) => ({
+      symbol: row.symbol,
+      date: row.date,
+      time: row.time,
+      tradeCount: row.tradeCount,
+      tradeVolume: row.tradeVolume,
+      tradeValue: row.tradeValue,
+      priceMin: row.priceMin,
+      priceMax: row.priceMax,
+      priceYesterday: row.priceYesterday,
+      priceFirst: row.priceFirst,
+      priceLast: row.priceLast,
+      priceLastChange: row.priceLastChange,
+      priceLastChangePercent: row.priceLastChangePercent,
+      closePrice: row.closePrice,
+      closePriceChange: row.closePriceChange,
+      closePriceChangePercent: row.closePriceChangePercent,
+      rawJson: row.rawJson as Prisma.InputJsonValue
+    }));
 
     await symbolRepository.upsertDailyMetrics(normalizedTradeRows);
 

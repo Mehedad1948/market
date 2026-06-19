@@ -1,7 +1,9 @@
+import { Prisma } from '@prisma/client';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 
 import { env } from '../config/env';
+import { logger } from '../lib/logger';
 import { AppError } from '../middleware/errorHandler';
 import { symbolRepository } from '../repositories/symbol.repository';
 import { analysisCacheRepository } from '../repositories/analysisCache.repository';
@@ -83,6 +85,16 @@ const buildSource = (refreshed: boolean): 'database' | 'brsapi' => {
   return refreshed ? 'brsapi' : 'database';
 };
 
+export const isDatabaseUnavailableError = (error: unknown): boolean => {
+  return (
+    error instanceof Prisma.PrismaClientInitializationError ||
+    error instanceof Prisma.PrismaClientKnownRequestError ||
+    error instanceof Prisma.PrismaClientUnknownRequestError ||
+    error instanceof Prisma.PrismaClientRustPanicError ||
+    error instanceof Prisma.PrismaClientValidationError
+  );
+};
+
 export const isHistoryStale = (
   history: Array<{ updatedAt: Date }>,
   now = new Date()
@@ -134,15 +146,55 @@ export const getStockAnalysis = async (
   const params = analysisQuerySchema.parse(
     request.query
   ) as SymbolAnalysisParams;
-  let history = await symbolRepository.getSymbolHistory(symbol);
-  const shouldRefresh = params.forceRefresh || isHistoryStale(history);
+  let history = [] as Awaited<ReturnType<typeof symbolRepository.getSymbolHistory>>;
+  let databaseAvailable = true;
+  let source: 'database' | 'brsapi' = 'database';
+
+  try {
+    history = await symbolRepository.getSymbolHistory(symbol);
+  } catch (error) {
+    if (!isDatabaseUnavailableError(error)) {
+      throw error;
+    }
+
+    databaseAvailable = false;
+    logger.warn({ err: error, symbol }, 'Database unavailable, falling back to BrsApi');
+  }
+
+  const shouldRefresh =
+    params.forceRefresh || !databaseAvailable || isHistoryStale(history);
 
   if (shouldRefresh) {
-    await symbolDataService.refreshSymbolHistory(
-      symbol,
-      params.includeRealLegal
-    );
-    history = await symbolRepository.getSymbolHistory(symbol);
+    source = 'brsapi';
+
+    if (databaseAvailable) {
+      try {
+        await symbolDataService.refreshSymbolHistory(
+          symbol,
+          params.includeRealLegal
+        );
+        history = await symbolRepository.getSymbolHistory(symbol);
+      } catch (error) {
+        if (!isDatabaseUnavailableError(error)) {
+          throw error;
+        }
+
+        databaseAvailable = false;
+        logger.warn(
+          { err: error, symbol },
+          'Database unavailable during refresh, using direct BrsApi analysis'
+        );
+        history = await symbolDataService.fetchSymbolHistoryFromBrs(
+          symbol,
+          params.includeRealLegal
+        );
+      }
+    } else {
+      history = await symbolDataService.fetchSymbolHistoryFromBrs(
+        symbol,
+        params.includeRealLegal
+      );
+    }
   }
 
   const latestDataDate = history.at(-1)?.date;
@@ -160,54 +212,81 @@ export const getStockAnalysis = async (
     analysisConfig: buildAnalysisConfigForCache()
   });
 
-  const activeCache = await analysisCacheRepository.getActiveCache(
-    symbol,
-    paramsHash,
-    latestDataDate
-  );
+  if (databaseAvailable) {
+    try {
+      const activeCache = await analysisCacheRepository.getActiveCache(
+        symbol,
+        paramsHash,
+        latestDataDate
+      );
 
-  if (activeCache && activeCache.expiresAt > new Date()) {
-    const cachedResult = activeCache.result as StockAnalysisResult;
-    const finalResult = {
-      ...cachedResult,
-      cacheHit: true
-    };
-    await persistRequestLog(
-      request,
-      symbol,
-      params,
-      true,
-      cachedResult.source,
-      cachedResult.status
-    );
-    response.json(finalResult);
-    return;
+      if (activeCache && activeCache.expiresAt > new Date()) {
+        const cachedResult = activeCache.result as StockAnalysisResult;
+        const finalResult = {
+          ...cachedResult,
+          cacheHit: true
+        };
+        await persistRequestLog(
+          request,
+          symbol,
+          params,
+          true,
+          cachedResult.source,
+          cachedResult.status
+        );
+        response.json(finalResult);
+        return;
+      }
+    } catch (error) {
+      if (!isDatabaseUnavailableError(error)) {
+        throw error;
+      }
+
+      databaseAvailable = false;
+      logger.warn(
+        { err: error, symbol },
+        'Database unavailable during cache lookup, computing from BrsApi data only'
+      );
+    }
   }
 
   const result = analyzeSymbolMetrics(
     symbol,
     history,
     params,
-    buildSource(shouldRefresh),
+    source === 'brsapi' ? 'brsapi' : buildSource(shouldRefresh),
     false
   );
 
-  const expiresAt = new Date(Date.now() + env.CACHE_TTL_SECONDS * 1000);
-  await analysisCacheRepository.saveCache(
-    symbol,
-    paramsHash,
-    latestDataDate,
-    result,
-    expiresAt
-  );
-  await persistRequestLog(
-    request,
-    symbol,
-    params,
-    false,
-    result.source,
-    result.status
-  );
+  if (databaseAvailable) {
+    try {
+      const expiresAt = new Date(Date.now() + env.CACHE_TTL_SECONDS * 1000);
+      await analysisCacheRepository.saveCache(
+        symbol,
+        paramsHash,
+        latestDataDate,
+        result,
+        expiresAt
+      );
+      await persistRequestLog(
+        request,
+        symbol,
+        params,
+        false,
+        result.source,
+        result.status
+      );
+    } catch (error) {
+      if (!isDatabaseUnavailableError(error)) {
+        throw error;
+      }
+
+      logger.warn(
+        { err: error, symbol },
+        'Database unavailable during cache save or request logging, returning direct analysis result'
+      );
+    }
+  }
 
   response.json(result);
 };
