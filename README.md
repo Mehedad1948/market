@@ -65,6 +65,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/iran_stock_analysis
 BRS_API_KEY=your_key_here
 BRS_BASE_URL=https://Api.BrsApi.ir/Tsetmc
 CACHE_TTL_SECONDS=86400
+HISTORY_MAX_AGE_HOURS=24
 DEFAULT_WEEKLY_WINDOW=7
 DEFAULT_MONTHLY_WINDOW=30
 DEFAULT_QUARTERLY_WINDOW=90
@@ -84,7 +85,20 @@ PRICE_MID_MA_WINDOW=50
 PRICE_LONG_MA_WINDOW=200
 PRICE_MA_TYPE=EMA
 PRICE_TREND_MIN_SLOPE=0
-COMPOSITE_SCORING_VERSION=2
+ATR_PERIOD=14
+ATR_LOW_VOLATILITY_THRESHOLD=0.015
+ATR_HIGH_VOLATILITY_THRESHOLD=0.05
+ADX_PERIOD=14
+LIQUIDITY_CONFIRMATION_WINDOW=20
+LIQUIDITY_EXPANSION_THRESHOLD=1.5
+LIQUIDITY_CONTRACTION_THRESHOLD=0.7
+SIGNAL_SCAN_ENABLED=true
+SIGNAL_SCAN_CRON=0 16 * * 0-4
+SIGNAL_SCAN_TIMEZONE=Asia/Tehran
+SIGNAL_SCAN_SYMBOLS=
+SIGNAL_SCAN_FORCE_REFRESH=false
+SIGNAL_SCAN_INCLUDE_REAL_LEGAL=false
+COMPOSITE_SCORING_VERSION=3
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX_REQUESTS=60
 ```
@@ -129,6 +143,16 @@ curl "http://localhost:3000/api/stocks/%D9%81%D9%85%D9%84%DB%8C/history?limit=50
 curl "http://localhost:3000/api/stocks/%D9%81%D9%85%D9%84%DB%8C/latest"
 ```
 
+### Manual Signal Scan
+
+```bash
+curl -X POST "http://localhost:3000/api/stocks/scan" \
+  -H "Content-Type: application/json" \
+  -d "{\"symbols\":[\"%D9%81%D9%85%D9%84%DB%8C\"],\"forceRefresh\":false,\"includeRealLegal\":false}"
+```
+
+If `symbols` is omitted, the scan uses `SIGNAL_SCAN_SYMBOLS` first and then falls back to tracked symbols already stored in the database.
+
 ## Analysis Logic
 
 The analysis has three deterministic layers:
@@ -136,6 +160,8 @@ The analysis has three deterministic layers:
 - Liquidity/value trend from `SymbolDailyMetric.tradeValue`
 - Stoch RSI timing and risk trigger from `SymbolDailyMetric.closePrice`
 - Price trend confirmation from `SymbolDailyMetric.closePrice`
+- ATR volatility context from `priceMin`, `priceMax`, and `closePrice`
+- ADX trend-strength confirmation from `priceMin`, `priceMax`, and `closePrice`
 
 ### Liquidity Layer
 
@@ -225,12 +251,24 @@ Composite actions:
 | `-35` to `-69`  | Risk sell / reduce risk                |
 | `-70` to `-100` | Strong sell / risk-off condition       |
 
-Scoring version 2 uses mutually exclusive Stoch RSI sell penalties:
+Scoring version 3 keeps the existing action names and Stoch RSI sell penalties, then applies small ADX, ATR, and liquidity-confirmation modifiers:
 
 - `-50` if `stochRsi.confirmedSell`
 - otherwise `-25` if `stochRsi.riskSell`
 
 This avoids double-counting confirmed sell as both risk sell and confirmed sell.
+
+The current MVP also adds:
+
+- ADX as a trend-strength filter and directional-bias modifier
+- ATR as a volatility-risk modifier
+- Relative traded-value confirmation using `latestTradeValue / avgTradeValue20`
+
+Future improvements intentionally deferred in this MVP:
+
+- Relative strength versus market or sector benchmark time series
+- Real/legal money flow integration from `SymbolRealLegalDaily`
+- Support and resistance distance using pivot or swing logic plus backtesting
 
 ## Example Response Shape
 

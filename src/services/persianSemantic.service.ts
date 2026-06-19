@@ -1,8 +1,11 @@
 import type {
+  AdxAnalysis,
   AnalysisConfidence,
   AnalysisRegime,
+  AtrAnalysis,
   BuyTimeframes,
   CompositeSignal,
+  LiquidityConfirmation,
   PriceTrendAnalysis,
   StochRsiAnalysis
 } from '../types';
@@ -116,6 +119,59 @@ const generateCompositePersianSummary = (
   return compositeMessageByAction[composite.action];
 };
 
+const generateAdxPersianSummary = (adx?: AdxAnalysis): string | null => {
+  if (!adx || adx.status === 'INSUFFICIENT_DATA') {
+    return null;
+  }
+
+  if (adx.trendStrength === 'WEAK') {
+    return 'قدرت روند در ADX ضعیف است و بهتر است سیگنال ها با احتیاط بیشتری تفسیر شوند.';
+  }
+
+  if (adx.trendStrength === 'STRONG' && adx.bearishDirectionalBias) {
+    return 'ADX از روند قوی خبر می دهد، اما برتری جهت دار فعلا بیشتر نزولی است.';
+  }
+
+  if (adx.trendStrength === 'STRONG' && adx.bullishDirectionalBias) {
+    return 'ADX روند را قوی نشان می دهد و برتری جهت دار فعلا به نفع حرکت صعودی است.';
+  }
+
+  return null;
+};
+
+const generateAtrPersianSummary = (atr?: AtrAnalysis): string | null => {
+  if (!atr || atr.status === 'INSUFFICIENT_DATA') {
+    return null;
+  }
+
+  if (atr.volatilityRegime === 'HIGH') {
+    return 'ATR بالا نشان می دهد نوسان زیاد است و مدیریت ریسک و فاصله حد ضرر اهمیت بیشتری دارد.';
+  }
+
+  return null;
+};
+
+const generateLiquidityConfirmationSummary = (
+  liquidityConfirmation?: LiquidityConfirmation
+): string | null => {
+  if (
+    !liquidityConfirmation ||
+    liquidityConfirmation.relativeTradeValue20 === null
+  ) {
+    return null;
+  }
+
+  if (liquidityConfirmation.liquidityExpansion) {
+    return 'ارزش معاملات روز آخر نسبت به میانگین 20 روزه تقویت شده است.';
+  }
+
+  if (liquidityConfirmation.liquidityContraction) {
+    return 'ارزش معاملات روز آخر نسبت به میانگین 20 روزه کاهش یافته است.';
+  }
+
+  return null;
+};
+
 export const buildPersianSummary = (
   symbol: string,
   regime: AnalysisRegime,
@@ -123,7 +179,10 @@ export const buildPersianSummary = (
   buy?: BuyTimeframes,
   stochRsi?: StochRsiAnalysis,
   composite?: CompositeSignal,
-  priceTrend?: PriceTrendAnalysis
+  priceTrend?: PriceTrendAnalysis,
+  adx?: AdxAnalysis,
+  atr?: AtrAnalysis,
+  liquidityConfirmation?: LiquidityConfirmation
 ): string => {
   const message = baseMessageByRegime[regime].replace('{symbol}', symbol);
   const parts = [message];
@@ -149,6 +208,23 @@ export const buildPersianSummary = (
   const compositeMessage = generateCompositePersianSummary(composite);
   if (compositeMessage) {
     parts.push(compositeMessage);
+  }
+
+  const adxMessage = generateAdxPersianSummary(adx);
+  if (adxMessage) {
+    parts.push(adxMessage);
+  }
+
+  const atrMessage = generateAtrPersianSummary(atr);
+  if (atrMessage) {
+    parts.push(atrMessage);
+  }
+
+  const liquidityMessage = generateLiquidityConfirmationSummary(
+    liquidityConfirmation
+  );
+  if (liquidityMessage) {
+    parts.push(liquidityMessage);
   }
 
   parts.push(DISCLAIMER);

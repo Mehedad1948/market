@@ -2,10 +2,13 @@ import type { SymbolDailyMetric } from '@prisma/client';
 
 import { env } from '../config/env';
 import type {
+  AdxAnalysis,
   AnalysisConfidence,
   AnalysisRegime,
+  AtrAnalysis,
   BuyTimeframes,
   CompositeSignal,
+  LiquidityConfirmation,
   LiquidityMetrics,
   MovingAverageAnalysis,
   PriceTrendAnalysis,
@@ -16,6 +19,7 @@ import type {
   StockAnalysisResult,
   SymbolAnalysisParams
 } from '../types';
+import { sortByDateAsc } from '../utils/dateSort';
 import { round } from '../utils/number';
 import {
   calculateSlope,
@@ -29,14 +33,18 @@ import {
 } from './persianSemantic.service';
 import { calculatePriceTrendAnalysis } from './priceTrend.service';
 import { calculateStochRsiAnalysis } from './stochRsi.service';
+import {
+  calculateAdxAnalysis,
+  calculateAtrAnalysis
+} from './technicalIndicators.service';
 
 const toNumber = (value: { toString(): string } | null): number | null => {
   return value === null ? null : Number(value.toString());
 };
 
 export class InsufficientDataError extends Error {
-  constructor() {
-    super('Insufficient historical data.');
+  constructor(message = 'Insufficient historical data.') {
+    super(message);
     this.name = 'InsufficientDataError';
   }
 }
@@ -193,6 +201,19 @@ export const buildAnalysisConfigForCache = () => {
   return {
     buyThresholdPercent: env.BUY_THRESHOLD_PERCENT,
     compositeScoringVersion: env.COMPOSITE_SCORING_VERSION,
+    atr: {
+      period: env.ATR_PERIOD,
+      lowVolatilityThreshold: env.ATR_LOW_VOLATILITY_THRESHOLD,
+      highVolatilityThreshold: env.ATR_HIGH_VOLATILITY_THRESHOLD
+    },
+    adx: {
+      period: env.ADX_PERIOD
+    },
+    liquidityConfirmation: {
+      window: env.LIQUIDITY_CONFIRMATION_WINDOW,
+      expansionThreshold: env.LIQUIDITY_EXPANSION_THRESHOLD,
+      contractionThreshold: env.LIQUIDITY_CONTRACTION_THRESHOLD
+    },
     stochRsi: getStochRsiConfig(),
     priceTrend: getPriceTrendConfig()
   };
@@ -231,7 +252,10 @@ export const calculateCompositeSignal = (
   regime: AnalysisRegime,
   buy: BuyTimeframes,
   stochRsi: StochRsiAnalysis,
-  priceTrend: PriceTrendAnalysis
+  priceTrend: PriceTrendAnalysis,
+  adx?: AdxAnalysis,
+  atr?: AtrAnalysis,
+  liquidityConfirmation?: LiquidityConfirmation
 ): CompositeSignal => {
   const activeSellSignal = stochRsi.riskSell || stochRsi.confirmedSell;
   const bullishRegime =
@@ -274,6 +298,12 @@ export const calculateCompositeSignal = (
     liquidityRegimeIsBullishOrNeutral &&
     !activeSellSignal &&
     !stochRsi.probableBuy;
+  const adxWeak = adx?.trendStrength === 'WEAK';
+  const adxStrongBullish =
+    adx?.trendStrength === 'STRONG' && adx.bullishDirectionalBias;
+  const adxStrongBearish =
+    adx?.trendStrength === 'STRONG' && adx.bearishDirectionalBias;
+  const highAtr = atr?.volatilityRegime === 'HIGH';
 
   let action: CompositeSignal['action'] = 'CAUTION';
   let explanationKey = 'composite.caution';
@@ -301,6 +331,21 @@ export const calculateCompositeSignal = (
     explanationKey = 'composite.hold';
   }
 
+  if (action === 'STRONG_BUY' && (adxWeak || highAtr || adxStrongBearish)) {
+    action = adxStrongBearish || highAtr ? 'CAUTION' : 'PROBABLE_BUY';
+    explanationKey =
+      adxWeak && !highAtr && !adxStrongBearish
+        ? 'composite.strongBuyDowngradedByAdx'
+        : highAtr
+          ? 'composite.strongBuyDowngradedByAtr'
+          : 'composite.strongBuyDowngradedByAdx';
+  }
+
+  if (action === 'PROBABLE_BUY' && adxStrongBearish) {
+    action = 'CAUTION';
+    explanationKey = 'composite.caution';
+  }
+
   const stochPenalty = stochRsi.confirmedSell
     ? -50
     : stochRsi.riskSell
@@ -313,6 +358,12 @@ export const calculateCompositeSignal = (
       (stochRsi.probableBuy ? 20 : 0) +
       (priceTrend.direction === 'BULLISH' ? 20 : 0) +
       (priceTrend.direction === 'IMPROVING' ? 10 : 0) +
+      (adxWeak ? -10 : 0) +
+      (adxStrongBullish ? 5 : 0) +
+      (adxStrongBearish ? -10 : 0) +
+      (highAtr ? -10 : 0) +
+      (liquidityConfirmation?.liquidityExpansion ? 5 : 0) +
+      (liquidityConfirmation?.liquidityContraction ? -5 : 0) +
       stochPenalty -
       (regime === 'SHORT_TERM_WARNING' ? 20 : 0) -
       (regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
@@ -331,6 +382,51 @@ export const calculateCompositeSignal = (
   };
 };
 
+const calculateRelativeLiquidity = (
+  values: number[],
+  window: number
+): LiquidityConfirmation => {
+  const recentValues = values.slice(-window);
+
+  if (recentValues.length < window) {
+    return {
+      relativeTradeValue20: null,
+      liquidityExpansion: false,
+      liquidityContraction: false
+    };
+  }
+
+  const latestTradeValue = recentValues.at(-1);
+
+  if (latestTradeValue === undefined) {
+    return {
+      relativeTradeValue20: null,
+      liquidityExpansion: false,
+      liquidityContraction: false
+    };
+  }
+
+  const averageTradeValue =
+    recentValues.reduce((sum, value) => sum + value, 0) / recentValues.length;
+  const relativeTradeValue20 =
+    averageTradeValue === 0 ? null : round(latestTradeValue / averageTradeValue);
+
+  return {
+    relativeTradeValue20,
+    liquidityExpansion:
+      relativeTradeValue20 !== null &&
+      relativeTradeValue20 >= env.LIQUIDITY_EXPANSION_THRESHOLD,
+    liquidityContraction:
+      relativeTradeValue20 !== null &&
+      relativeTradeValue20 <= env.LIQUIDITY_CONTRACTION_THRESHOLD
+  };
+};
+
+// Future improvements:
+// - relative strength requires index or sector benchmark time series
+// - real/legal money flow requires SymbolRealLegalDaily joins in analysis
+// - support/resistance needs pivot detection plus backtesting
+
 export const analyzeSymbolMetrics = (
   symbol: string,
   rows: SymbolDailyMetric[],
@@ -338,11 +434,13 @@ export const analyzeSymbolMetrics = (
   source: 'database' | 'brsapi' | 'mixed',
   cacheHit: boolean
 ): StockAnalysisResult => {
-  if (rows.length < params.quarterlyWindow) {
+  const sortedRows = sortByDateAsc(rows);
+
+  if (sortedRows.length < params.quarterlyWindow) {
     throw new InsufficientDataError();
   }
 
-  const values = rows
+  const values = sortedRows
     .map((row) => toNumber(row.tradeValue))
     .filter((value): value is number => value !== null);
 
@@ -387,19 +485,27 @@ export const analyzeSymbolMetrics = (
 
   const regime = classifyRegime(movingAverageAnalysis);
   const confidence = calculateConfidence(regime, movingAverageAnalysis);
-  const latestRow = rows.at(-1);
+  const latestRow = sortedRows.at(-1);
 
   if (!latestRow) {
     throw new InsufficientDataError();
   }
 
   const latestTradeValue = toNumber(latestRow.tradeValue);
+  if (latestTradeValue === null) {
+    throw new InsufficientDataError('Latest trade value is missing.');
+  }
+
   const latestClosePrice = toNumber(latestRow.closePrice);
   const latestClosePriceChangePercent = toNumber(
     latestRow.closePriceChangePercent
   );
+  const liquidityConfirmation = calculateRelativeLiquidity(
+    values,
+    env.LIQUIDITY_CONFIRMATION_WINDOW
+  );
   const valueChangeVsMonthly =
-    latestTradeValue !== null && movingAverageAnalysis.maMonthly !== 0
+    movingAverageAnalysis.maMonthly !== 0
       ? round(
           (latestTradeValue - movingAverageAnalysis.maMonthly) /
             Math.abs(movingAverageAnalysis.maMonthly)
@@ -415,7 +521,7 @@ export const analyzeSymbolMetrics = (
 
   const buy = calculateBuyTimeframes(
     {
-      latestTradeValue: latestTradeValue ?? 0,
+      latestTradeValue,
       maWeekly: movingAverageAnalysis.maWeekly,
       maMonthly: movingAverageAnalysis.maMonthly,
       maQuarterly: movingAverageAnalysis.maQuarterly,
@@ -425,10 +531,28 @@ export const analyzeSymbolMetrics = (
     },
     env.BUY_THRESHOLD_PERCENT
   );
-  const stochRsi = calculateStochRsiAnalysis(rows, getStochRsiConfig());
-  const priceTrend = calculatePriceTrendAnalysis(rows, getPriceTrendConfig());
+  const stochRsi = calculateStochRsiAnalysis(sortedRows, getStochRsiConfig());
+  const priceTrend = calculatePriceTrendAnalysis(
+    sortedRows,
+    getPriceTrendConfig()
+  );
+  const atr = calculateAtrAnalysis(
+    sortedRows,
+    env.ATR_PERIOD,
+    env.ATR_LOW_VOLATILITY_THRESHOLD,
+    env.ATR_HIGH_VOLATILITY_THRESHOLD
+  );
+  const adx = calculateAdxAnalysis(sortedRows, env.ADX_PERIOD);
   const sell = calculateSellTimeframes(regime, buy, stochRsi, priceTrend);
-  const composite = calculateCompositeSignal(regime, buy, stochRsi, priceTrend);
+  const composite = calculateCompositeSignal(
+    regime,
+    buy,
+    stochRsi,
+    priceTrend,
+    adx,
+    atr,
+    liquidityConfirmation
+  );
 
   return {
     status: 'OK',
@@ -452,7 +576,10 @@ export const analyzeSymbolMetrics = (
       monthlySlope: movingAverageAnalysis.monthlySlope,
       quarterlySlope: movingAverageAnalysis.quarterlySlope,
       valueChangeVsMonthly,
-      valueChangeVsQuarterly
+      valueChangeVsQuarterly,
+      relativeTradeValue20: liquidityConfirmation.relativeTradeValue20,
+      liquidityExpansion: liquidityConfirmation.liquidityExpansion,
+      liquidityContraction: liquidityConfirmation.liquidityContraction
     },
     signals: {
       regime,
@@ -467,6 +594,8 @@ export const analyzeSymbolMetrics = (
       sell,
       stochRsi,
       priceTrend,
+      adx,
+      atr,
       composite
     },
     persianSummary: buildPersianSummary(
@@ -476,7 +605,10 @@ export const analyzeSymbolMetrics = (
       buy,
       stochRsi,
       composite,
-      priceTrend
+      priceTrend,
+      adx,
+      atr,
+      liquidityConfirmation
     ),
     disclaimer: analysisDisclaimer
   };

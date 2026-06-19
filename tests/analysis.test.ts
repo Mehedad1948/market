@@ -10,7 +10,13 @@ import {
   classifyRegime,
   isAboveBy
 } from '../src/services/analysis.service';
-import type { PriceTrendAnalysis, StochRsiAnalysis } from '../src/types';
+import type {
+  AdxAnalysis,
+  AtrAnalysis,
+  LiquidityConfirmation,
+  PriceTrendAnalysis,
+  StochRsiAnalysis
+} from '../src/types';
 
 const baseStochRsi: StochRsiAnalysis = {
   status: 'OK',
@@ -50,6 +56,31 @@ const basePriceTrend: PriceTrendAnalysis = {
   bullish: false,
   bearish: false,
   warning: false
+};
+
+const baseAdx: AdxAnalysis = {
+  status: 'OK',
+  period: 14,
+  latestAdx: 22,
+  latestPlusDi: 24,
+  latestMinusDi: 24,
+  trendStrength: 'MODERATE',
+  bullishDirectionalBias: false,
+  bearishDirectionalBias: false
+};
+
+const baseAtr: AtrAnalysis = {
+  status: 'OK',
+  period: 14,
+  latestAtr: 10,
+  latestAtrPercent: 0.02,
+  volatilityRegime: 'NORMAL'
+};
+
+const neutralLiquidityConfirmation: LiquidityConfirmation = {
+  relativeTradeValue20: 1,
+  liquidityExpansion: false,
+  liquidityContraction: false
 };
 
 describe('analysis.service', () => {
@@ -238,6 +269,16 @@ describe('analysis.service', () => {
         bearish: expect.any(Boolean),
         warning: expect.any(Boolean)
       },
+      adx: {
+        status: expect.any(String),
+        trendStrength: expect.any(String),
+        bullishDirectionalBias: expect.any(Boolean),
+        bearishDirectionalBias: expect.any(Boolean)
+      },
+      atr: {
+        status: expect.any(String),
+        volatilityRegime: expect.any(String)
+      },
       composite: {
         action: expect.any(String),
         score: expect.any(Number),
@@ -248,7 +289,139 @@ describe('analysis.service', () => {
         }
       }
     });
+    expect(result.metrics.relativeTradeValue20).toEqual(expect.any(Number));
+    expect(typeof result.metrics.liquidityExpansion).toBe('boolean');
+    expect(typeof result.metrics.liquidityContraction).toBe('boolean');
     expect('bullish' in result.signals).toBe(false);
+  });
+
+  it('sorts rows ascending before using latest row and calculations', () => {
+    const rows = [
+      {
+        id: 'row-3',
+        symbol: 'TEST',
+        date: '1403-01-03',
+        time: null,
+        tradeCount: BigInt(3),
+        tradeVolume: 300,
+        tradeValue: 300,
+        priceMin: 11,
+        priceMax: 21,
+        priceYesterday: null,
+        priceFirst: null,
+        priceLast: null,
+        priceLastChange: null,
+        priceLastChangePercent: null,
+        closePrice: 15,
+        closePriceChange: null,
+        closePriceChangePercent: 1,
+        rawJson: {},
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        id: 'row-1',
+        symbol: 'TEST',
+        date: '1403-01-01',
+        time: null,
+        tradeCount: BigInt(1),
+        tradeVolume: 100,
+        tradeValue: 100,
+        priceMin: 9,
+        priceMax: 19,
+        priceYesterday: null,
+        priceFirst: null,
+        priceLast: null,
+        priceLastChange: null,
+        priceLastChangePercent: null,
+        closePrice: 13,
+        closePriceChange: null,
+        closePriceChangePercent: 1,
+        rawJson: {},
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        id: 'row-2',
+        symbol: 'TEST',
+        date: '1403-01-02',
+        time: null,
+        tradeCount: BigInt(2),
+        tradeVolume: 200,
+        tradeValue: 200,
+        priceMin: 10,
+        priceMax: 20,
+        priceYesterday: null,
+        priceFirst: null,
+        priceLast: null,
+        priceLastChange: null,
+        priceLastChangePercent: null,
+        closePrice: 14,
+        closePriceChange: null,
+        closePriceChangePercent: 1,
+        rawJson: {},
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    ] as SymbolDailyMetric[];
+
+    const result = analyzeSymbolMetrics(
+      'TEST',
+      rows,
+      {
+        weeklyWindow: 1,
+        monthlyWindow: 2,
+        quarterlyWindow: 3,
+        forceRefresh: false,
+        includeRealLegal: false
+      },
+      'database',
+      false
+    );
+
+    expect(result.latestDataDate).toBe('1403-01-03');
+    expect(result.metrics.latestTradeValue).toBe(300);
+  });
+
+  it('throws when latest trade value is missing instead of treating it as zero', () => {
+    const rows = Array.from({ length: 91 }, (_, index) => ({
+      id: `row-${index}`,
+      symbol: 'TEST',
+      date: `1403-${String(Math.floor(index / 30) + 1).padStart(2, '0')}-${String((index % 30) + 1).padStart(2, '0')}`,
+      time: null,
+      tradeCount: BigInt(index + 1),
+      tradeVolume: 1_000 + index,
+      tradeValue: index === 90 ? null : 1_000 + index,
+      priceMin: 100 + index,
+      priceMax: 110 + index,
+      priceYesterday: null,
+      priceFirst: null,
+      priceLast: null,
+      priceLastChange: null,
+      priceLastChangePercent: null,
+      closePrice: 200 + index,
+      closePriceChange: null,
+      closePriceChangePercent: 1,
+      rawJson: {},
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })) as SymbolDailyMetric[];
+
+    expect(() =>
+      analyzeSymbolMetrics(
+        'TEST',
+        rows,
+        {
+          weeklyWindow: 7,
+          monthlyWindow: 30,
+          quarterlyWindow: 90,
+          forceRefresh: false,
+          includeRealLegal: false
+        },
+        'database',
+        false
+      )
+    ).toThrow('Latest trade value is missing.');
   });
 
   it('composite action becomes PROBABLE_BUY when Stoch RSI buy exists and liquidity is not bearish', () => {
@@ -269,7 +442,10 @@ describe('analysis.service', () => {
         ...basePriceTrend,
         direction: 'IMPROVING',
         bullish: true
-      }
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.action).toBe('PROBABLE_BUY');
@@ -298,7 +474,14 @@ describe('analysis.service', () => {
         direction: 'BEARISH',
         bearish: true,
         warning: true
-      }
+      },
+      {
+        ...baseAdx,
+        bearishDirectionalBias: true,
+        bullishDirectionalBias: false
+      },
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.action).toBe('CONFIRMED_SELL');
@@ -343,7 +526,10 @@ describe('analysis.service', () => {
         riskSell: true,
         confirmedSell: true
       },
-      basePriceTrend
+      basePriceTrend,
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.score).toBe(-50);
@@ -361,7 +547,10 @@ describe('analysis.service', () => {
         ...baseStochRsi,
         riskSell: true
       },
-      basePriceTrend
+      basePriceTrend,
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.score).toBe(-5);
@@ -384,7 +573,10 @@ describe('analysis.service', () => {
         ...basePriceTrend,
         direction: 'BULLISH',
         bullish: true
-      }
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
     const bearish = calculateCompositeSignal(
       'BEARISH_LIQUIDITY',
@@ -403,7 +595,14 @@ describe('analysis.service', () => {
         direction: 'BEARISH',
         bearish: true,
         warning: true
-      }
+      },
+      {
+        ...baseAdx,
+        bearishDirectionalBias: true,
+        bullishDirectionalBias: false
+      },
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(bullish.score).toBe(100);
@@ -426,7 +625,10 @@ describe('analysis.service', () => {
         ...basePriceTrend,
         direction: 'BULLISH',
         bullish: true
-      }
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.action).toBe('STRONG_BUY');
@@ -445,7 +647,10 @@ describe('analysis.service', () => {
         riskSell: true,
         confirmedSell: true
       },
-      basePriceTrend
+      basePriceTrend,
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.action).toBe('CAUTION');
@@ -466,7 +671,10 @@ describe('analysis.service', () => {
         ...baseStochRsi,
         riskSell: true
       },
-      basePriceTrend
+      basePriceTrend,
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.action).toBe('RISK_SELL');
@@ -488,7 +696,10 @@ describe('analysis.service', () => {
         ...basePriceTrend,
         direction: 'IMPROVING',
         bullish: true
-      }
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.action).toBe('PROBABLE_BUY');
@@ -503,9 +714,72 @@ describe('analysis.service', () => {
         longTerm: false
       },
       baseStochRsi,
-      basePriceTrend
+      basePriceTrend,
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
     );
 
     expect(composite.action).toBe('HOLD');
+  });
+
+  it('downgrades STRONG_BUY when ADX is weak', () => {
+    const composite = calculateCompositeSignal(
+      'STRONG_BULLISH_LIQUIDITY',
+      {
+        shortTerm: true,
+        midTerm: true,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'BULLISH',
+        bullish: true
+      },
+      {
+        ...baseAdx,
+        trendStrength: 'WEAK',
+        latestAdx: 15
+      },
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.action).toBe('PROBABLE_BUY');
+    expect(composite.score).toBe(75);
+  });
+
+  it('high ATR downgrades strong buy and reduces score', () => {
+    const composite = calculateCompositeSignal(
+      'STRONG_BULLISH_LIQUIDITY',
+      {
+        shortTerm: true,
+        midTerm: true,
+        longTerm: false
+      },
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'BULLISH',
+        bullish: true
+      },
+      baseAdx,
+      {
+        ...baseAtr,
+        volatilityRegime: 'HIGH',
+        latestAtrPercent: 0.08
+      },
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.action).toBe('CAUTION');
+    expect(composite.score).toBe(75);
   });
 });

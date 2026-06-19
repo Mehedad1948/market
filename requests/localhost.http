@@ -21,6 +21,10 @@ Accept: application/json
 GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis?includeRealLegal=true
 Accept: application/json
 
+### Analyze Symbol - View New ADX ATR Liquidity Fields
+GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis?forceRefresh=true
+Accept: application/json
+
 ### Force Refresh Symbol History
 POST {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/refresh
 Content-Type: {{json}}
@@ -46,6 +50,17 @@ Accept: application/json
 ### Get Latest Stored Metric
 GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/latest
 Accept: application/json
+
+### Manual Signal Scan - Specific Symbols
+POST {{baseUrl}}/api/stocks/scan
+Content-Type: {{json}}
+Accept: application/json
+
+{
+  "symbols": ["فملی", "خودرو"],
+  "forceRefresh": false,
+  "includeRealLegal": false
+}
 
 ### Invalid Window Validation Example
 GET {{baseUrl}}/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis?weeklyWindow=30&monthlyWindow=7&quarterlyWindow=90

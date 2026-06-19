@@ -63,6 +63,12 @@ export type LiquidityMetrics = {
   quarterlySlope: number;
 };
 
+export type LiquidityConfirmation = {
+  relativeTradeValue20: number | null;
+  liquidityExpansion: boolean;
+  liquidityContraction: boolean;
+};
+
 export type BuyTimeframes = {
   shortTerm: boolean;
   midTerm: boolean;
@@ -127,6 +133,37 @@ export type CompositeSignal = {
     min: -100;
     max: 100;
   };
+};
+
+export type AtrVolatilityRegime =
+  | 'LOW'
+  | 'NORMAL'
+  | 'HIGH'
+  | 'INSUFFICIENT_DATA';
+
+export type AtrAnalysis = {
+  status: 'OK' | 'INSUFFICIENT_DATA';
+  period: number;
+  latestAtr: number | null;
+  latestAtrPercent: number | null;
+  volatilityRegime: AtrVolatilityRegime;
+};
+
+export type AdxTrendStrength =
+  | 'WEAK'
+  | 'MODERATE'
+  | 'STRONG'
+  | 'INSUFFICIENT_DATA';
+
+export type AdxAnalysis = {
+  status: 'OK' | 'INSUFFICIENT_DATA';
+  period: number;
+  latestAdx: number | null;
+  latestPlusDi: number | null;
+  latestMinusDi: number | null;
+  trendStrength: AdxTrendStrength;
+  bullishDirectionalBias: boolean;
+  bearishDirectionalBias: boolean;
 };
 
 export type StochRsiConfig = {
@@ -214,6 +251,9 @@ export type StockAnalysisResult = {
     quarterlySlope: number;
     valueChangeVsMonthly: number | null;
     valueChangeVsQuarterly: number | null;
+    relativeTradeValue20: number | null;
+    liquidityExpansion: boolean;
+    liquidityContraction: boolean;
   };
   signals: {
     regime: AnalysisRegime;
@@ -226,6 +266,8 @@ export type StockAnalysisResult = {
     sell: SellTimeframes;
     stochRsi: StochRsiAnalysis;
     priceTrend: PriceTrendAnalysis;
+    adx: AdxAnalysis;
+    atr: AtrAnalysis;
     composite: CompositeSignal;
   };
   persianSummary: string;

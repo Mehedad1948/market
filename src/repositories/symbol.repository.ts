@@ -65,6 +65,16 @@ export const symbolRepository = {
     return sortByDateAsc(rows);
   },
 
+  async getTrackedSymbols() {
+    const rows = await prisma.symbol.findMany({
+      orderBy: {
+        symbol: 'asc'
+      }
+    });
+
+    return rows.map((row) => row.symbol);
+  },
+
   async getPaginatedHistory(symbol: string, limit: number, offset: number) {
     return prisma.symbolDailyMetric.findMany({
       where: { symbol },

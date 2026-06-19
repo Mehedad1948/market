@@ -9,6 +9,7 @@ import {
   analyzeSymbolMetrics,
   buildAnalysisConfigForCache
 } from '../services/analysis.service';
+import { signalScanService } from '../services/signalScan.service';
 import { symbolDataService } from '../services/symbolData.service';
 import { createHash } from '../utils/hash';
 import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
@@ -72,8 +73,32 @@ const historyQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0)
 });
 
+const manualScanBodySchema = z.object({
+  symbols: z.array(z.string().trim().min(1)).optional(),
+  forceRefresh: z.boolean().optional(),
+  includeRealLegal: z.boolean().optional()
+});
+
 const buildSource = (refreshed: boolean): 'database' | 'brsapi' => {
   return refreshed ? 'brsapi' : 'database';
+};
+
+export const isHistoryStale = (
+  history: Array<{ updatedAt: Date }>,
+  now = new Date()
+): boolean => {
+  if (history.length === 0) {
+    return true;
+  }
+
+  const latestUpdatedAt = history.reduce((latest, row) => {
+    return row.updatedAt > latest ? row.updatedAt : latest;
+  }, history[0]!.updatedAt);
+
+  return (
+    now.getTime() - latestUpdatedAt.getTime() >=
+    env.HISTORY_MAX_AGE_HOURS * 60 * 60 * 1000
+  );
 };
 
 const persistRequestLog = async (
@@ -110,7 +135,7 @@ export const getStockAnalysis = async (
     request.query
   ) as SymbolAnalysisParams;
   let history = await symbolRepository.getSymbolHistory(symbol);
-  const shouldRefresh = params.forceRefresh || history.length === 0;
+  const shouldRefresh = params.forceRefresh || isHistoryStale(history);
 
   if (shouldRefresh) {
     await symbolDataService.refreshSymbolHistory(
@@ -251,4 +276,32 @@ export const getLatestStockMetric = async (
     symbol,
     row
   });
+};
+
+export const runManualSignalScan = async (
+  request: Request,
+  response: Response
+) => {
+  const body = manualScanBodySchema.parse(request.body ?? {});
+  const options: {
+    symbols?: string[];
+    forceRefresh?: boolean;
+    includeRealLegal?: boolean;
+  } = {};
+
+  if (body.symbols !== undefined) {
+    options.symbols = body.symbols;
+  }
+
+  if (body.forceRefresh !== undefined) {
+    options.forceRefresh = body.forceRefresh;
+  }
+
+  if (body.includeRealLegal !== undefined) {
+    options.includeRealLegal = body.includeRealLegal;
+  }
+
+  const result = await signalScanService.runScan(options);
+
+  response.json(result);
 };
