@@ -1,6 +1,6 @@
 import { createApp } from './app';
 import { env } from './config/env';
-import { logger } from './lib/logger';
+import { buildEnvDiagnostics, logger } from './lib/logger';
 import { startSignalScanSchedule } from './services/signalScan.service';
 
 const app = createApp();
@@ -13,11 +13,24 @@ app.get('/health', (_req, res) => {
 });
 
 app.listen(env.PORT, '0.0.0.0', () => {
-  logger.info(`Server listening on port ${env.PORT}`);
+  logger.info(
+    {
+      env: buildEnvDiagnostics()
+    },
+    `🚀 Server listening on port ${env.PORT}`
+  );
 
   try {
     startSignalScanSchedule();
   } catch (error) {
-    logger.error({ error }, 'Failed to start signal scan schedule');
+    logger.error({ err: error }, '🧨 Failed to start signal scan schedule');
   }
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, '💥 Unhandled promise rejection');
+});
+
+process.on('uncaughtException', (error) => {
+  logger.fatal({ err: error }, '💀 Uncaught exception');
 });

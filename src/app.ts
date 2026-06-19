@@ -1,5 +1,6 @@
 import express from 'express';
 import pinoHttp from 'pino-http';
+import { randomUUID } from 'crypto';
 
 import { logger } from './lib/logger';
 import { healthRouter } from './routes/health.routes';
@@ -15,7 +16,27 @@ export const createApp = () => {
   app.use(express.json());
   app.use(
     pinoHttp({
-      logger
+      logger,
+      genReqId: (request, response) => {
+        const existing = request.headers['x-request-id'];
+        const firstHeaderValue = Array.isArray(existing) ? existing[0] : existing;
+        const requestId = firstHeaderValue ?? randomUUID();
+        response.setHeader('x-request-id', requestId);
+        return requestId;
+      },
+      customReceivedMessage: () => '➡️ Request received',
+      customSuccessMessage: (_request, response) => {
+        if (response.statusCode >= 500) {
+          return '❌ Request failed';
+        }
+
+        if (response.statusCode >= 400) {
+          return '⚠️ Request completed with client error';
+        }
+
+        return '✅ Request completed';
+      },
+      customErrorMessage: () => '💥 Request pipeline crashed'
     })
   );
   app.use(rateLimit);

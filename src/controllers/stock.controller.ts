@@ -146,9 +146,20 @@ export const getStockAnalysis = async (
   const params = analysisQuerySchema.parse(
     request.query
   ) as SymbolAnalysisParams;
+  const requestLog = request.log ?? logger;
   let history = [] as Awaited<ReturnType<typeof symbolRepository.getSymbolHistory>>;
   let databaseAvailable = true;
   let source: 'database' | 'brsapi' = 'database';
+
+  requestLog.info(
+    {
+      symbol,
+      params,
+      query: request.query,
+      forceRefreshRequested: params.forceRefresh
+    },
+    '🧠 Analysis request received'
+  );
 
   try {
     history = await symbolRepository.getSymbolHistory(symbol);
@@ -158,11 +169,27 @@ export const getStockAnalysis = async (
     }
 
     databaseAvailable = false;
-    logger.warn({ err: error, symbol }, 'Database unavailable, falling back to BrsApi');
+    requestLog.warn(
+      { err: error, symbol },
+      '⚠️ Database unavailable, falling back to BrsApi'
+    );
   }
 
   const shouldRefresh =
     params.forceRefresh || !databaseAvailable || isHistoryStale(history);
+
+  requestLog.info(
+    {
+      symbol,
+      databaseAvailable,
+      historyRows: history.length,
+      shouldRefresh,
+      source
+    },
+    shouldRefresh
+      ? '🔄 Refresh path selected for analysis request'
+      : '📚 Using cached database history for analysis request'
+  );
 
   if (shouldRefresh) {
     source = 'brsapi';
@@ -180,9 +207,9 @@ export const getStockAnalysis = async (
         }
 
         databaseAvailable = false;
-        logger.warn(
+        requestLog.warn(
           { err: error, symbol },
-          'Database unavailable during refresh, using direct BrsApi analysis'
+          '⚠️ Database unavailable during refresh, using direct BrsApi analysis'
         );
         history = await symbolDataService.fetchSymbolHistoryFromBrs(
           symbol,
@@ -234,18 +261,37 @@ export const getStockAnalysis = async (
           cachedResult.source,
           cachedResult.status
         );
+        requestLog.info(
+          {
+            symbol,
+            latestDataDate,
+            cacheHit: true,
+            cacheStatus: cachedResult.status,
+            cacheSource: cachedResult.source
+          },
+          '⚡ Analysis cache hit'
+        );
         response.json(finalResult);
         return;
       }
+
+      requestLog.info(
+        {
+          symbol,
+          latestDataDate,
+          cacheHit: false
+        },
+        '🗃️ Analysis cache miss'
+      );
     } catch (error) {
       if (!isDatabaseUnavailableError(error)) {
         throw error;
       }
 
       databaseAvailable = false;
-      logger.warn(
+      requestLog.warn(
         { err: error, symbol },
-        'Database unavailable during cache lookup, computing from BrsApi data only'
+        '⚠️ Database unavailable during cache lookup, computing from BrsApi data only'
       );
     }
   }
@@ -256,6 +302,17 @@ export const getStockAnalysis = async (
     params,
     source === 'brsapi' ? 'brsapi' : buildSource(shouldRefresh),
     false
+  );
+
+  requestLog.info(
+    {
+      symbol,
+      resultStatus: result.status,
+      source: result.source,
+      historyRows: history.length,
+      latestDataDate
+    },
+    '📊 Analysis result computed'
   );
 
   if (databaseAvailable) {
@@ -281,9 +338,9 @@ export const getStockAnalysis = async (
         throw error;
       }
 
-      logger.warn(
+      requestLog.warn(
         { err: error, symbol },
-        'Database unavailable during cache save or request logging, returning direct analysis result'
+        '⚠️ Database unavailable during cache save or request logging, returning direct analysis result'
       );
     }
   }
@@ -303,6 +360,11 @@ export const refreshStockHistory = async (
   }
 
   const body = refreshBodySchema.parse(request.body ?? {});
+  const requestLog = request.log ?? logger;
+  requestLog.info(
+    { symbol, includeRealLegal: body.includeRealLegal },
+    '🔧 Manual refresh requested'
+  );
   const refreshResult = await symbolDataService.refreshSymbolHistory(
     symbol,
     body.includeRealLegal
@@ -322,6 +384,10 @@ export const refreshStockHistory = async (
 export const getStockHistory = async (request: Request, response: Response) => {
   const symbol = decodeSymbol(getRouteSymbol(request.params.symbol));
   const query = historyQuerySchema.parse(request.query);
+  (request.log ?? logger).info(
+    { symbol, query },
+    '📜 History request received'
+  );
 
   const rows = await symbolRepository.getPaginatedHistory(
     symbol,
@@ -342,6 +408,7 @@ export const getLatestStockMetric = async (
   response: Response
 ) => {
   const symbol = decodeSymbol(getRouteSymbol(request.params.symbol));
+  (request.log ?? logger).info({ symbol }, '🕒 Latest metric request received');
   const row = await symbolRepository.getLatestMetric(symbol);
 
   if (!row) {
@@ -362,6 +429,7 @@ export const runManualSignalScan = async (
   response: Response
 ) => {
   const body = manualScanBodySchema.parse(request.body ?? {});
+  (request.log ?? logger).info({ body }, '📡 Manual signal scan requested');
   const options: {
     symbols?: string[];
     forceRefresh?: boolean;

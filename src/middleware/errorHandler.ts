@@ -26,14 +26,28 @@ export const notFoundHandler = (_request: Request, response: Response) => {
 
 export const errorHandler = (
   error: Error,
-  _request: Request,
+  request: Request,
   response: Response,
   next: NextFunction
 ) => {
   void next;
-  logger.error({ err: error }, 'Unhandled error');
+  const requestContext = {
+    method: request.method,
+    url: request.originalUrl,
+    params: request.params,
+    query: request.query,
+    ip: request.ip
+  };
 
   if (error instanceof BrsApiError) {
+    logger.error(
+      {
+        err: error,
+        request: requestContext,
+        brs: error.details
+      },
+      '🚨 BrsApi error reached HTTP boundary'
+    );
     response.status(502).json({
       status: 'ERROR',
       message: 'خطا در دریافت داده از BrsApi',
@@ -43,6 +57,10 @@ export const errorHandler = (
   }
 
   if (error instanceof InsufficientDataError) {
+    logger.warn(
+      { err: error, request: requestContext },
+      'ℹ️ Insufficient data response returned'
+    );
     response.status(200).json({
       status: 'INSUFFICIENT_DATA',
       persianSummary: 'برای محاسبه میانگین فصلی، تعداد داده‌های تاریخی کافی نیست.'
@@ -51,6 +69,14 @@ export const errorHandler = (
   }
 
   if (error instanceof AppError) {
+    logger.warn(
+      {
+        err: error,
+        request: requestContext,
+        payload: error.payload
+      },
+      '⚠️ App error returned to client'
+    );
     response.status(error.statusCode).json({
       status: 'ERROR',
       message: error.message,
@@ -58,6 +84,11 @@ export const errorHandler = (
     });
     return;
   }
+
+  logger.error(
+    { err: error, request: requestContext },
+    '💥 Unhandled internal server error'
+  );
 
   response.status(500).json({
     status: 'ERROR',

@@ -1,6 +1,7 @@
 import type { Prisma, SymbolDailyMetric } from '@prisma/client';
 
 import { brsClient } from './brsClient';
+import { logger } from '../lib/logger';
 import { symbolRepository } from '../repositories/symbol.repository';
 import type { BrsHistoryTradeRow, BrsRealLegalRow } from '../types';
 import { parseNullableBigInt, parseNullableNumber } from '../utils/number';
@@ -94,6 +95,10 @@ export const symbolDataService = {
     symbol: string,
     includeRealLegal: boolean
   ): Promise<SymbolDailyMetric[]> {
+    logger.info(
+      { symbol, includeRealLegal },
+      '📥 Fetching symbol history from BrsApi'
+    );
     const tradeHistory = await brsClient.fetchTradeHistory(symbol);
     const normalizedTradeRows = tradeHistory
       .map((row) => normalizeTradeRow(symbol, row))
@@ -104,12 +109,28 @@ export const symbolDataService = {
 
     void includeRealLegal;
 
+    logger.info(
+      {
+        symbol,
+        includeRealLegal,
+        fetchedTradeRows: tradeHistory.length,
+        normalizedTradeRows: normalizedTradeRows.length
+      },
+      normalizedTradeRows.length > 0
+        ? '✅ Symbol history normalized'
+        : '⚠️ Symbol history fetch produced no storable trade rows'
+    );
+
     return normalizedTradeRows.map((row, index) =>
       buildTransientMetricRow(row, index)
     );
   },
 
   async refreshSymbolHistory(symbol: string, includeRealLegal: boolean) {
+    logger.info(
+      { symbol, includeRealLegal },
+      '🔄 Refreshing symbol history'
+    );
     await symbolRepository.upsertSymbol(symbol);
 
     const transientRows = await this.fetchSymbolHistoryFromBrs(
@@ -137,6 +158,14 @@ export const symbolDataService = {
     }));
 
     await symbolRepository.upsertDailyMetrics(normalizedTradeRows);
+    logger.info(
+      {
+        symbol,
+        includeRealLegal,
+        tradeRowsUpserted: normalizedTradeRows.length
+      },
+      '💾 Trade history persisted'
+    );
 
     if (includeRealLegal) {
       const realLegalHistory = await brsClient.fetchRealLegalHistory(symbol);
@@ -145,6 +174,14 @@ export const symbolDataService = {
         .filter((row): row is Prisma.SymbolRealLegalDailyUncheckedCreateInput => row !== null);
 
       await symbolRepository.upsertRealLegalRows(normalizedRealLegalRows);
+      logger.info(
+        {
+          symbol,
+          fetchedRealLegalRows: realLegalHistory.length,
+          realLegalRowsUpserted: normalizedRealLegalRows.length
+        },
+        '🏛️ Real/legal history persisted'
+      );
     }
 
     return {
