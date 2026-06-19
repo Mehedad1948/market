@@ -57,6 +57,22 @@ npm run prisma:migrate
 npm run dev
 ```
 
+## Docker
+
+Build the image:
+
+```bash
+docker build -t iran-stock-analysis-api .
+```
+
+Run it:
+
+```bash
+docker run --rm -p 3000:3000 --env-file .env iran-stock-analysis-api
+```
+
+Container startup runs `prisma migrate deploy` before the API starts, so `DATABASE_URL` must point to a reachable PostgreSQL instance.
+
 ## Environment Variables
 
 ```env
@@ -366,6 +382,32 @@ npm test
 npm run build
 npm run lint
 ```
+
+## GitHub Actions
+
+This repo now includes:
+
+- `.github/workflows/ci.yml`
+  - installs dependencies
+  - generates Prisma client
+  - runs lint, tests, build
+  - verifies the Docker image builds
+
+- `.github/workflows/docker-image.yml`
+  - builds and pushes the image to `ghcr.io/<owner>/<repo>`
+  - runs on `main` / `master`, tags, and manual dispatch
+
+For Hamravesh, the usual setup is:
+
+1. Connect the GitHub repository in Hamravesh.
+2. Use the included `Dockerfile` as the container build source, or point Hamravesh to the GHCR image published by GitHub Actions.
+3. Set runtime environment variables in Hamravesh:
+   - `DATABASE_URL`
+   - `BRS_API_KEY`
+   - `BRS_BASE_URL`
+   - any optional analysis config overrides
+
+If Hamravesh pulls from GHCR, make sure the platform has permission to read the package or use a public package visibility setting.
 
 Included test coverage:
 
