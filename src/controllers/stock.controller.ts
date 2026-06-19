@@ -85,13 +85,37 @@ const buildSource = (refreshed: boolean): 'database' | 'brsapi' => {
   return refreshed ? 'brsapi' : 'database';
 };
 
+class DatabaseOperationTimeoutError extends Error {
+  operation: string;
+  timeoutMs: number;
+
+  constructor(operation: string, timeoutMs: number) {
+    super(`Database operation timed out: ${operation} after ${timeoutMs}ms`);
+    this.name = 'DatabaseOperationTimeoutError';
+    this.operation = operation;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+const withDbTimeout = async <T>(operation: string, task: Promise<T>): Promise<T> => {
+  return Promise.race([
+    task,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => {
+        reject(new DatabaseOperationTimeoutError(operation, env.DB_OPERATION_TIMEOUT_MS));
+      }, env.DB_OPERATION_TIMEOUT_MS);
+    })
+  ]);
+};
+
 export const isDatabaseUnavailableError = (error: unknown): boolean => {
   return (
     error instanceof Prisma.PrismaClientInitializationError ||
     error instanceof Prisma.PrismaClientKnownRequestError ||
     error instanceof Prisma.PrismaClientUnknownRequestError ||
     error instanceof Prisma.PrismaClientRustPanicError ||
-    error instanceof Prisma.PrismaClientValidationError
+    error instanceof Prisma.PrismaClientValidationError ||
+    error instanceof DatabaseOperationTimeoutError
   );
 };
 
@@ -162,7 +186,10 @@ export const getStockAnalysis = async (
   );
 
   try {
-    history = await symbolRepository.getSymbolHistory(symbol);
+    history = await withDbTimeout(
+      'getSymbolHistory.initial',
+      symbolRepository.getSymbolHistory(symbol)
+    );
   } catch (error) {
     if (!isDatabaseUnavailableError(error)) {
       throw error;
@@ -196,11 +223,17 @@ export const getStockAnalysis = async (
 
     if (databaseAvailable) {
       try {
-        await symbolDataService.refreshSymbolHistory(
-          symbol,
-          params.includeRealLegal
+        await withDbTimeout(
+          'refreshSymbolHistory',
+          symbolDataService.refreshSymbolHistory(
+            symbol,
+            params.includeRealLegal
+          )
         );
-        history = await symbolRepository.getSymbolHistory(symbol);
+        history = await withDbTimeout(
+          'getSymbolHistory.afterRefresh',
+          symbolRepository.getSymbolHistory(symbol)
+        );
       } catch (error) {
         if (!isDatabaseUnavailableError(error)) {
           throw error;
@@ -208,8 +241,8 @@ export const getStockAnalysis = async (
 
         databaseAvailable = false;
         requestLog.warn(
-          { err: error, symbol },
-          '⚠️ Database unavailable during refresh, using direct BrsApi analysis'
+          { err: error, symbol, timeoutMs: env.DB_OPERATION_TIMEOUT_MS },
+          '⚠️ Database refresh/persist path failed or timed out, using live BrsApi analysis'
         );
         history = await symbolDataService.fetchSymbolHistoryFromBrs(
           symbol,
@@ -241,10 +274,13 @@ export const getStockAnalysis = async (
 
   if (databaseAvailable) {
     try {
-      const activeCache = await analysisCacheRepository.getActiveCache(
-        symbol,
-        paramsHash,
-        latestDataDate
+      const activeCache = await withDbTimeout(
+        'analysisCache.getActiveCache',
+        analysisCacheRepository.getActiveCache(
+          symbol,
+          paramsHash,
+          latestDataDate
+        )
       );
 
       if (activeCache && activeCache.expiresAt > new Date()) {
@@ -253,13 +289,16 @@ export const getStockAnalysis = async (
           ...cachedResult,
           cacheHit: true
         };
-        await persistRequestLog(
-          request,
-          symbol,
-          params,
-          true,
-          cachedResult.source,
-          cachedResult.status
+        await withDbTimeout(
+          'analysisRequest.create.cacheHit',
+          persistRequestLog(
+            request,
+            symbol,
+            params,
+            true,
+            cachedResult.source,
+            cachedResult.status
+          )
         );
         requestLog.info(
           {
@@ -318,20 +357,26 @@ export const getStockAnalysis = async (
   if (databaseAvailable) {
     try {
       const expiresAt = new Date(Date.now() + env.CACHE_TTL_SECONDS * 1000);
-      await analysisCacheRepository.saveCache(
-        symbol,
-        paramsHash,
-        latestDataDate,
-        result,
-        expiresAt
+      await withDbTimeout(
+        'analysisCache.saveCache',
+        analysisCacheRepository.saveCache(
+          symbol,
+          paramsHash,
+          latestDataDate,
+          result,
+          expiresAt
+        )
       );
-      await persistRequestLog(
-        request,
-        symbol,
-        params,
-        false,
-        result.source,
-        result.status
+      await withDbTimeout(
+        'analysisRequest.create.cacheMiss',
+        persistRequestLog(
+          request,
+          symbol,
+          params,
+          false,
+          result.source,
+          result.status
+        )
       );
     } catch (error) {
       if (!isDatabaseUnavailableError(error)) {
@@ -339,7 +384,7 @@ export const getStockAnalysis = async (
       }
 
       requestLog.warn(
-        { err: error, symbol },
+        { err: error, symbol, timeoutMs: env.DB_OPERATION_TIMEOUT_MS },
         '⚠️ Database unavailable during cache save or request logging, returning direct analysis result'
       );
     }

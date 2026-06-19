@@ -24,6 +24,7 @@ export const buildEnvDiagnostics = () => ({
   brsApiKeyPreview: maskSecret(env.BRS_API_KEY),
   cacheTtlSeconds: env.CACHE_TTL_SECONDS,
   historyMaxAgeHours: env.HISTORY_MAX_AGE_HOURS,
+  dbOperationTimeoutMs: env.DB_OPERATION_TIMEOUT_MS,
   signalScanEnabled: env.SIGNAL_SCAN_ENABLED,
   signalScanCron: env.SIGNAL_SCAN_CRON,
   signalScanTimezone: env.SIGNAL_SCAN_TIMEZONE

@@ -57,6 +57,7 @@ const envSchema = z.object({
   SIGNAL_SCAN_FORCE_REFRESH: z.coerce.boolean().default(false),
   SIGNAL_SCAN_INCLUDE_REAL_LEGAL: z.coerce.boolean().default(false),
   COMPOSITE_SCORING_VERSION: z.coerce.number().int().positive().default(3),
+  DB_OPERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(60)
 });
