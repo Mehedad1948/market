@@ -3,6 +3,7 @@ import pinoHttp from 'pino-http';
 
 import { logger } from './lib/logger';
 import { healthRouter } from './routes/health.routes';
+import { rootRouter } from './routes/root.routes';
 import { stockRouter } from './routes/stock.routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { rateLimit } from './middleware/rateLimit';
@@ -19,6 +20,7 @@ export const createApp = () => {
   );
   app.use(rateLimit);
 
+  app.use(rootRouter);
   app.use(healthRouter);
   app.use('/api/stocks', stockRouter);
 
