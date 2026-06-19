@@ -3,6 +3,18 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { sortByDateAsc } from '../utils/dateSort';
 
+const WRITE_CHUNK_SIZE = 250;
+
+const chunkRows = <T>(rows: T[], size: number) => {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+
+  return chunks;
+};
+
 export const symbolRepository = {
   async upsertSymbol(symbol: string, name?: string | null) {
     return prisma.symbol.upsert({
@@ -17,20 +29,20 @@ export const symbolRepository = {
       return;
     }
 
-    await prisma.$transaction(
-      rows.map((row) =>
-        prisma.symbolDailyMetric.upsert({
-          where: {
-            symbol_date: {
-              symbol: row.symbol,
-              date: row.date
-            }
-          },
-          update: row,
-          create: row
-        })
-      )
-    );
+    const symbol = rows[0]!.symbol;
+    const chunks = chunkRows(rows, WRITE_CHUNK_SIZE);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.symbolDailyMetric.deleteMany({
+        where: { symbol }
+      });
+
+      for (const chunk of chunks) {
+        await tx.symbolDailyMetric.createMany({
+          data: chunk
+        });
+      }
+    });
   },
 
   async upsertRealLegalRows(rows: Prisma.SymbolRealLegalDailyUncheckedCreateInput[]) {
@@ -38,20 +50,20 @@ export const symbolRepository = {
       return;
     }
 
-    await prisma.$transaction(
-      rows.map((row) =>
-        prisma.symbolRealLegalDaily.upsert({
-          where: {
-            symbol_date: {
-              symbol: row.symbol,
-              date: row.date
-            }
-          },
-          update: row,
-          create: row
-        })
-      )
-    );
+    const symbol = rows[0]!.symbol;
+    const chunks = chunkRows(rows, WRITE_CHUNK_SIZE);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.symbolRealLegalDaily.deleteMany({
+        where: { symbol }
+      });
+
+      for (const chunk of chunks) {
+        await tx.symbolRealLegalDaily.createMany({
+          data: chunk
+        });
+      }
+    });
   },
 
   async getSymbolHistory(symbol: string) {

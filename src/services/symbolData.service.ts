@@ -127,11 +127,16 @@ export const symbolDataService = {
   },
 
   async refreshSymbolHistory(symbol: string, includeRealLegal: boolean) {
+    const startedAt = Date.now();
     logger.info(
       { symbol, includeRealLegal },
       '🔄 Refreshing symbol history'
     );
     await symbolRepository.upsertSymbol(symbol);
+    logger.info(
+      { symbol, durationMs: Date.now() - startedAt },
+      '🧩 Symbol row ensured before history persistence'
+    );
 
     const transientRows = await this.fetchSymbolHistoryFromBrs(
       symbol,
@@ -157,12 +162,22 @@ export const symbolDataService = {
       rawJson: row.rawJson as Prisma.InputJsonValue
     }));
 
+    const dailyMetricsStartedAt = Date.now();
+    logger.info(
+      {
+        symbol,
+        includeRealLegal,
+        tradeRowsToPersist: normalizedTradeRows.length
+      },
+      '💽 Persisting trade history to database'
+    );
     await symbolRepository.upsertDailyMetrics(normalizedTradeRows);
     logger.info(
       {
         symbol,
         includeRealLegal,
-        tradeRowsUpserted: normalizedTradeRows.length
+        tradeRowsUpserted: normalizedTradeRows.length,
+        durationMs: Date.now() - dailyMetricsStartedAt
       },
       '💾 Trade history persisted'
     );
@@ -173,16 +188,34 @@ export const symbolDataService = {
         .map((row) => normalizeRealLegalRow(symbol, row))
         .filter((row): row is Prisma.SymbolRealLegalDailyUncheckedCreateInput => row !== null);
 
+      const realLegalStartedAt = Date.now();
+      logger.info(
+        {
+          symbol,
+          realLegalRowsToPersist: normalizedRealLegalRows.length
+        },
+        '💽 Persisting real/legal history to database'
+      );
       await symbolRepository.upsertRealLegalRows(normalizedRealLegalRows);
       logger.info(
         {
           symbol,
           fetchedRealLegalRows: realLegalHistory.length,
-          realLegalRowsUpserted: normalizedRealLegalRows.length
+          realLegalRowsUpserted: normalizedRealLegalRows.length,
+          durationMs: Date.now() - realLegalStartedAt
         },
         '🏛️ Real/legal history persisted'
       );
     }
+
+    logger.info(
+      {
+        symbol,
+        includeRealLegal,
+        totalDurationMs: Date.now() - startedAt
+      },
+      '✅ Symbol refresh completed'
+    );
 
     return {
       tradeRows: normalizedTradeRows.length
