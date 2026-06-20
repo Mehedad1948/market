@@ -51,7 +51,13 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
-6. Start development server:
+6. Seed plans:
+
+```bash
+npm run prisma:seed
+```
+
+7. Start development server:
 
 ```bash
 npm run dev
@@ -80,6 +86,7 @@ PORT=3000
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/iran_stock_analysis
 BRS_API_KEY=your_key_here
 BRS_BASE_URL=https://Api.BrsApi.ir/Tsetmc
+AUTH_SESSION_TTL_DAYS=30
 CACHE_TTL_SECONDS=86400
 ANALYSIS_REQUEST_RETENTION_DAYS=30
 ANALYSIS_CACHE_RETENTION_DAYS=7
@@ -125,6 +132,25 @@ RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX_REQUESTS=60
 ```
 
+## Auth Foundation
+
+The service now includes database and server-side foundations for:
+
+- users
+- linked auth accounts for `GOOGLE`, `TELEGRAM`, and future `SMS`
+- hashed bearer sessions in `UserSession`
+- subscription plans and user subscriptions
+- payment transaction records
+- watchlists
+- portfolios and holdings
+
+Provider login flows are not implemented yet. The current foundation is limited to:
+
+- Prisma models and migration
+- seeded subscription plans, including a 14-day trial plan
+- token hashing and session persistence helpers
+- request-level current-user extraction from bearer sessions
+
 ## API Endpoints
 
 Sample local requests are available in [requests/localhost.http](/D:/projects/market/requests/localhost.http).
@@ -133,6 +159,21 @@ Sample local requests are available in [requests/localhost.http](/D:/projects/ma
 
 ```bash
 curl "http://localhost:3000/health"
+```
+
+### Current Auth Session
+
+```bash
+curl "http://localhost:3000/api/auth/me"
+curl "http://localhost:3000/api/auth/me" \
+  -H "Authorization: Bearer YOUR_SESSION_TOKEN"
+```
+
+### Logout Current Session
+
+```bash
+curl -X POST "http://localhost:3000/api/auth/logout" \
+  -H "Authorization: Bearer YOUR_SESSION_TOKEN"
 ```
 
 ### Symbol Analysis

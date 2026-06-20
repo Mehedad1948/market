@@ -7,12 +7,63 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AuthProvider {
+  GOOGLE
+  TELEGRAM
+  SMS
+}
+
+enum OtpPurpose {
+  LOGIN
+  VERIFY_PHONE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  EXPIRED
+  CANCELED
+  PENDING
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
+}
+
 model Symbol {
-  id        String   @id @default(uuid())
-  symbol    String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(uuid())
+  symbol         String   @unique
+  name           String?
+  isin           String?
+  tsetmcId       String?
+  sectorId       String?
+  sectorName     String?
+  displaySector  String?
+  instrumentType String   @default("UNKNOWN")
+  isActive       Boolean  @default(true)
+  rawJson        Json?
+  lastSeenAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([sectorId])
+  @@index([sectorName])
+  @@index([instrumentType])
+  @@index([isActive])
+}
+
+model Sector {
+  id          String   @id
+  name        String
+  displayName String?
+  slug        String?  @unique
+  sortOrder   Int      @default(999)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model SymbolDailyMetric {
@@ -89,4 +140,172 @@ model AnalysisRequest {
   createdAt  DateTime @default(now())
 
   @@index([symbol, createdAt])
+}
+
+model User {
+  id               String              @id @default(uuid())
+  displayName      String?
+  firstName        String?
+  lastName         String?
+  email            String?             @unique
+  phone            String?             @unique
+  avatarUrl        String?
+  telegramUserId   String?             @unique
+  telegramUsername String?
+  isActive         Boolean             @default(true)
+  trialUsed        Boolean             @default(false)
+  lastLoginAt      DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  authAccounts     UserAuthAccount[]
+  sessions         UserSession[]
+  otpCodes         OtpCode[]
+  subscriptions    Subscription[]
+  payments         PaymentTransaction[]
+  watchlist        UserWatchlistItem[]
+  portfolios       Portfolio[]
+}
+
+model UserAuthAccount {
+  id                String       @id @default(uuid())
+  userId            String
+  provider          AuthProvider
+  providerAccountId String
+  providerEmail     String?
+  providerPhone     String?
+  metadata          Json?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model UserSession {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  ip        String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([revokedAt])
+}
+
+model OtpCode {
+  id          String     @id @default(uuid())
+  userId      String?
+  targetPhone String
+  codeHash    String
+  purpose     OtpPurpose
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([targetPhone, expiresAt])
+  @@index([userId, createdAt])
+}
+
+model Plan {
+  id            String         @id @default(uuid())
+  code          String         @unique
+  name          String
+  description   String?
+  durationDays  Int
+  priceAmount   Decimal?       @db.Decimal(18, 2)
+  currency      String?
+  isTrial       Boolean        @default(false)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id               String               @id @default(uuid())
+  userId           String
+  planId           String
+  status           SubscriptionStatus
+  startsAt         DateTime
+  endsAt           DateTime
+  canceledAt       DateTime?
+  paymentProvider  String?
+  paymentReference String?
+  metadata         Json?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan             Plan                 @relation(fields: [planId], references: [id])
+  payments         PaymentTransaction[]
+
+  @@index([userId, status, endsAt])
+  @@index([planId])
+  @@index([status, endsAt])
+}
+
+model PaymentTransaction {
+  id             String                   @id @default(uuid())
+  userId         String
+  subscriptionId String?
+  provider       String
+  reference      String
+  status         PaymentTransactionStatus
+  amount         Decimal                  @db.Decimal(18, 2)
+  currency       String
+  payload        Json?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   Subscription?            @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, reference])
+  @@index([userId, createdAt])
+  @@index([subscriptionId])
+}
+
+model UserWatchlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  symbol    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, symbol])
+  @@index([symbol])
+}
+
+model Portfolio {
+  id        String             @id @default(uuid())
+  userId    String
+  name      String             @default("Default")
+  isDefault Boolean            @default(false)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  holdings  PortfolioHolding[]
+
+  @@index([userId])
+  @@index([userId, isDefault])
+}
+
+model PortfolioHolding {
+  id              String    @id @default(uuid())
+  portfolioId     String
+  symbol          String
+  quantity        Decimal   @db.Decimal(30, 4)
+  averageBuyPrice Decimal?  @db.Decimal(30, 4)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  portfolio       Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, symbol])
+  @@index([symbol])
 }

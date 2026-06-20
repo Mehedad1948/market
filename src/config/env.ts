@@ -12,6 +12,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   BRS_API_KEY: z.string().min(1),
   BRS_BASE_URL: z.string().url(),
+  AUTH_SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
   CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(86400),
   ANALYSIS_REQUEST_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   ANALYSIS_CACHE_RETENTION_DAYS: z.coerce.number().int().positive().default(7),

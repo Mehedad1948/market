@@ -14,6 +14,17 @@ const samples: RequestSample[] = [
     path: '/health'
   },
   {
+    title: 'Current Auth Session',
+    method: 'GET',
+    path: '/api/auth/me'
+  },
+  {
+    title: 'Logout Current Session',
+    method: 'POST',
+    path: '/api/auth/logout',
+    body: {}
+  },
+  {
     title: 'Analyze Symbol - Default Windows',
     method: 'GET',
     path: '/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis'
@@ -277,4 +288,3 @@ export const rootRouter = Router();
 rootRouter.get('/', (_request, response) => {
   response.type('html').send(renderHomePage());
 });
-
