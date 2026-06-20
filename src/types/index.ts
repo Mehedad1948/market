@@ -228,6 +228,94 @@ export type AnalysisRegime =
 
 export type AnalysisConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
 
+export type LabeledValue<T> = {
+  label: string;
+  value: T;
+};
+
+export type AdxDirectionalBiasValue = 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+
+export type StockAnalysisSignals = {
+  regime: LabeledValue<AnalysisRegime>;
+  crossWeeklyAboveMonthly: LabeledValue<boolean>;
+  crossWeeklyBelowMonthly: LabeledValue<boolean>;
+  crossMonthlyAboveQuarterly: LabeledValue<boolean>;
+  crossMonthlyBelowQuarterly: LabeledValue<boolean>;
+  confidence: LabeledValue<AnalysisConfidence>;
+  buy: {
+    shortTerm: LabeledValue<boolean>;
+    midTerm: LabeledValue<boolean>;
+    longTerm: LabeledValue<boolean>;
+  };
+  sell: {
+    shortTerm: LabeledValue<boolean>;
+    midTerm: LabeledValue<boolean>;
+    longTerm: LabeledValue<boolean>;
+  };
+  stochRsi: Omit<
+    StochRsiAnalysis,
+    | 'status'
+    | 'latestZone'
+    | 'crossUpInGreen'
+    | 'crossDownInRed'
+    | 'probableBuy'
+    | 'riskSell'
+    | 'confirmedSell'
+  > & {
+    status: LabeledValue<StochRsiAnalysisStatus>;
+    latestZone: LabeledValue<StochRsiZone>;
+    crossUpInGreen: LabeledValue<boolean>;
+    crossDownInRed: LabeledValue<boolean>;
+    probableBuy: LabeledValue<boolean>;
+    riskSell: LabeledValue<boolean>;
+    confirmedSell: LabeledValue<boolean>;
+  };
+  priceTrend: Omit<
+    PriceTrendAnalysis,
+    | 'status'
+    | 'direction'
+    | 'closeAboveFastMa'
+    | 'closeAboveMidMa'
+    | 'closeAboveLongMa'
+    | 'fastAboveMidMa'
+    | 'midAboveLongMa'
+    | 'bullish'
+    | 'bearish'
+    | 'warning'
+  > & {
+    status: LabeledValue<PriceTrendAnalysis['status']>;
+    direction: LabeledValue<PriceTrendDirection>;
+    closeAboveFastMa: LabeledValue<boolean>;
+    closeAboveMidMa: LabeledValue<boolean>;
+    closeAboveLongMa: LabeledValue<boolean>;
+    fastAboveMidMa: LabeledValue<boolean>;
+    midAboveLongMa: LabeledValue<boolean>;
+    bullish: LabeledValue<boolean>;
+    bearish: LabeledValue<boolean>;
+    warning: LabeledValue<boolean>;
+  };
+  adx: Omit<
+    AdxAnalysis,
+    | 'status'
+    | 'trendStrength'
+    | 'bullishDirectionalBias'
+    | 'bearishDirectionalBias'
+  > & {
+    status: LabeledValue<AdxAnalysis['status']>;
+    trendStrength: LabeledValue<AdxTrendStrength>;
+    directionalBias: LabeledValue<AdxDirectionalBiasValue>;
+    bullishDirectionalBias: LabeledValue<boolean>;
+    bearishDirectionalBias: LabeledValue<boolean>;
+  };
+  atr: Omit<AtrAnalysis, 'status' | 'volatilityRegime'> & {
+    status: LabeledValue<AtrAnalysis['status']>;
+    volatilityRegime: LabeledValue<AtrVolatilityRegime>;
+  };
+  composite: Omit<CompositeSignal, 'action'> & {
+    action: LabeledValue<CompositeSignalAction>;
+  };
+};
+
 export type StockAnalysisResult = {
   status: 'OK';
   symbol: string;
@@ -255,21 +343,7 @@ export type StockAnalysisResult = {
     liquidityExpansion: boolean;
     liquidityContraction: boolean;
   };
-  signals: {
-    regime: AnalysisRegime;
-    crossWeeklyAboveMonthly: boolean;
-    crossWeeklyBelowMonthly: boolean;
-    crossMonthlyAboveQuarterly: boolean;
-    crossMonthlyBelowQuarterly: boolean;
-    confidence: AnalysisConfidence;
-    buy: BuyTimeframes;
-    sell: SellTimeframes;
-    stochRsi: StochRsiAnalysis;
-    priceTrend: PriceTrendAnalysis;
-    adx: AdxAnalysis;
-    atr: AtrAnalysis;
-    composite: CompositeSignal;
-  };
+  signals: StockAnalysisSignals;
   persianSummary: string;
   disclaimer: string;
 };

@@ -293,42 +293,102 @@ Future improvements intentionally deferred in this MVP:
   "status": "OK",
   "symbol": "فملی",
   "signals": {
-    "regime": "STRONG_BULLISH_LIQUIDITY",
-    "crossWeeklyAboveMonthly": false,
-    "crossWeeklyBelowMonthly": false,
-    "crossMonthlyAboveQuarterly": false,
-    "crossMonthlyBelowQuarterly": false,
-    "confidence": "MEDIUM",
+    "regime": {
+      "label": "صعودی قوی",
+      "value": "STRONG_BULLISH_LIQUIDITY"
+    },
+    "crossWeeklyAboveMonthly": {
+      "label": "بدون سیگنال",
+      "value": false
+    },
+    "crossWeeklyBelowMonthly": {
+      "label": "بدون سیگنال",
+      "value": false
+    },
+    "crossMonthlyAboveQuarterly": {
+      "label": "بدون سیگنال",
+      "value": false
+    },
+    "crossMonthlyBelowQuarterly": {
+      "label": "بدون سیگنال",
+      "value": false
+    },
+    "confidence": {
+      "label": "متوسط",
+      "value": "MEDIUM"
+    },
     "buy": {
-      "shortTerm": true,
-      "midTerm": true,
-      "longTerm": true
+      "shortTerm": {
+        "label": "فعال",
+        "value": true
+      },
+      "midTerm": {
+        "label": "فعال",
+        "value": true
+      },
+      "longTerm": {
+        "label": "فعال",
+        "value": true
+      }
     },
     "sell": {
-      "shortTerm": false,
-      "midTerm": false,
-      "longTerm": false
+      "shortTerm": {
+        "label": "غیرفعال",
+        "value": false
+      },
+      "midTerm": {
+        "label": "غیرفعال",
+        "value": false
+      },
+      "longTerm": {
+        "label": "غیرفعال",
+        "value": false
+      }
     },
     "stochRsi": {
-      "status": "OK",
+      "status": {
+        "label": "آماده",
+        "value": "OK"
+      },
       "latestDate": "1404-03-20",
       "latestK": 17.42,
       "latestD": 12.85,
-      "latestZone": "GREEN",
+      "latestZone": {
+        "label": "سبز",
+        "value": "GREEN"
+      },
       "upperThreshold": 80,
       "lowerThreshold": 20,
-      "crossUpInGreen": true,
-      "crossDownInRed": false,
+      "crossUpInGreen": {
+        "label": "تقاطع خرید",
+        "value": true
+      },
+      "crossDownInRed": {
+        "label": "بدون سیگنال",
+        "value": false
+      },
       "redBearishCrossCount": 0,
       "greenBullishCrossCount": 1,
       "barsSinceLastGreenCrossUp": 1,
       "barsSinceLastRedCrossDown": null,
-      "probableBuy": true,
-      "riskSell": false,
-      "confirmedSell": false
+      "probableBuy": {
+        "label": "آماده",
+        "value": true
+      },
+      "riskSell": {
+        "label": "غیرفعال",
+        "value": false
+      },
+      "confirmedSell": {
+        "label": "غیرفعال",
+        "value": false
+      }
     },
     "priceTrend": {
-      "status": "OK",
+      "status": {
+        "label": "آماده",
+        "value": "OK"
+      },
       "latestDate": "1404-03-20",
       "latestClosePrice": 575,
       "fastMa": 540.2,
@@ -337,18 +397,87 @@ Future improvements intentionally deferred in this MVP:
       "fastSlope": 0.03,
       "midSlope": 0.01,
       "longSlope": 0.004,
-      "closeAboveFastMa": true,
-      "closeAboveMidMa": true,
-      "closeAboveLongMa": true,
-      "fastAboveMidMa": true,
-      "midAboveLongMa": true,
-      "direction": "BULLISH",
-      "bullish": true,
-      "bearish": false,
-      "warning": false
+      "closeAboveFastMa": {
+        "label": "بالاتر",
+        "value": true
+      },
+      "closeAboveMidMa": {
+        "label": "بالاتر",
+        "value": true
+      },
+      "closeAboveLongMa": {
+        "label": "بالاتر",
+        "value": true
+      },
+      "fastAboveMidMa": {
+        "label": "بالاتر",
+        "value": true
+      },
+      "midAboveLongMa": {
+        "label": "بالاتر",
+        "value": true
+      },
+      "direction": {
+        "label": "صعودی",
+        "value": "BULLISH"
+      },
+      "bullish": {
+        "label": "صعودی",
+        "value": true
+      },
+      "bearish": {
+        "label": "غیرفعال",
+        "value": false
+      },
+      "warning": {
+        "label": "عادی",
+        "value": false
+      }
+    },
+    "adx": {
+      "status": {
+        "label": "آماده",
+        "value": "OK"
+      },
+      "period": 14,
+      "latestAdx": 32.5,
+      "latestPlusDi": 24.1,
+      "latestMinusDi": 12.2,
+      "trendStrength": {
+        "label": "قوی",
+        "value": "STRONG"
+      },
+      "directionalBias": {
+        "label": "صعودی",
+        "value": "BULLISH"
+      },
+      "bullishDirectionalBias": {
+        "label": "صعودی",
+        "value": true
+      },
+      "bearishDirectionalBias": {
+        "label": "غیرفعال",
+        "value": false
+      }
+    },
+    "atr": {
+      "status": {
+        "label": "آماده",
+        "value": "OK"
+      },
+      "period": 14,
+      "latestAtr": 12.4,
+      "latestAtrPercent": 0.021,
+      "volatilityRegime": {
+        "label": "عادی",
+        "value": "NORMAL"
+      }
     },
     "composite": {
-      "action": "STRONG_BUY",
+      "action": {
+        "label": "خرید قوی",
+        "value": "STRONG_BUY"
+      },
       "score": 100,
       "explanationKey": "composite.strongBuy",
       "scoreScale": {

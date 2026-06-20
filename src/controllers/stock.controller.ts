@@ -9,11 +9,10 @@ import { symbolRepository } from '../repositories/symbol.repository';
 import { analysisCacheRepository } from '../repositories/analysisCache.repository';
 import {
   analyzeSymbolMetrics,
-  buildAnalysisConfigForCache
+  buildAnalysisParamsHash
 } from '../services/analysis.service';
 import { signalScanService } from '../services/signalScan.service';
 import { symbolDataService } from '../services/symbolData.service';
-import { createHash } from '../utils/hash';
 import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
 
 const getRouteSymbol = (value: string | string[] | undefined): string => {
@@ -264,15 +263,9 @@ export const getStockAnalysis = async (
     });
   }
 
-  const paramsHash = createHash({
-    weeklyWindow: params.weeklyWindow,
-    monthlyWindow: params.monthlyWindow,
-    quarterlyWindow: params.quarterlyWindow,
-    includeRealLegal: params.includeRealLegal,
-    analysisConfig: buildAnalysisConfigForCache()
-  });
+  const paramsHash = buildAnalysisParamsHash(params);
 
-  if (databaseAvailable) {
+  if (databaseAvailable && !params.forceRefresh) {
     try {
       const activeCache = await withDbTimeout(
         'analysisCache.getActiveCache',
@@ -308,10 +301,10 @@ export const getStockAnalysis = async (
             cacheStatus: cachedResult.status,
             cacheSource: cachedResult.source
           },
-          '⚡ Analysis cache hit'
-        );
-        response.json(finalResult);
-        return;
+        '⚡ Analysis cache hit'
+      );
+      response.json(finalResult);
+      return;
       }
 
       requestLog.info(

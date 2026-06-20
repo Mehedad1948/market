@@ -240,47 +240,147 @@ describe('analysis.service', () => {
     );
 
     expect(result.signals).toMatchObject({
-      regime: expect.any(String),
-      crossWeeklyAboveMonthly: expect.any(Boolean),
-      crossWeeklyBelowMonthly: expect.any(Boolean),
-      crossMonthlyAboveQuarterly: expect.any(Boolean),
-      crossMonthlyBelowQuarterly: expect.any(Boolean),
-      confidence: expect.any(String),
+      regime: {
+        label: expect.any(String),
+        value: expect.any(String)
+      },
+      crossWeeklyAboveMonthly: {
+        label: expect.any(String),
+        value: expect.any(Boolean)
+      },
+      crossWeeklyBelowMonthly: {
+        label: expect.any(String),
+        value: expect.any(Boolean)
+      },
+      crossMonthlyAboveQuarterly: {
+        label: expect.any(String),
+        value: expect.any(Boolean)
+      },
+      crossMonthlyBelowQuarterly: {
+        label: expect.any(String),
+        value: expect.any(Boolean)
+      },
+      confidence: {
+        label: expect.any(String),
+        value: expect.any(String)
+      },
       buy: {
-        shortTerm: expect.any(Boolean),
-        midTerm: expect.any(Boolean),
-        longTerm: expect.any(Boolean)
+        shortTerm: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        midTerm: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        longTerm: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        }
       },
       sell: {
-        shortTerm: expect.any(Boolean),
-        midTerm: expect.any(Boolean),
-        longTerm: expect.any(Boolean)
+        shortTerm: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        midTerm: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        longTerm: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        }
       },
       stochRsi: {
-        status: expect.any(String),
-        probableBuy: expect.any(Boolean),
-        riskSell: expect.any(Boolean),
-        confirmedSell: expect.any(Boolean)
+        status: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        latestZone: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        crossUpInGreen: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        crossDownInRed: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        probableBuy: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        riskSell: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        confirmedSell: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        }
       },
       priceTrend: {
-        status: expect.any(String),
-        direction: expect.any(String),
-        bullish: expect.any(Boolean),
-        bearish: expect.any(Boolean),
-        warning: expect.any(Boolean)
+        status: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        direction: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        bullish: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        bearish: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        warning: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        }
       },
       adx: {
-        status: expect.any(String),
-        trendStrength: expect.any(String),
-        bullishDirectionalBias: expect.any(Boolean),
-        bearishDirectionalBias: expect.any(Boolean)
+        status: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        trendStrength: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        directionalBias: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        bullishDirectionalBias: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        },
+        bearishDirectionalBias: {
+          label: expect.any(String),
+          value: expect.any(Boolean)
+        }
       },
       atr: {
-        status: expect.any(String),
-        volatilityRegime: expect.any(String)
+        status: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        volatilityRegime: {
+          label: expect.any(String),
+          value: expect.any(String)
+        }
       },
       composite: {
-        action: expect.any(String),
+        action: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
         score: expect.any(Number),
         explanationKey: expect.any(String),
         scoreScale: {

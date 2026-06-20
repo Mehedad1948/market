@@ -3,6 +3,7 @@ import type { SymbolDailyMetric } from '@prisma/client';
 import { env } from '../config/env';
 import type {
   AdxAnalysis,
+  AdxDirectionalBiasValue,
   AnalysisConfidence,
   AnalysisRegime,
   AtrAnalysis,
@@ -10,15 +11,18 @@ import type {
   CompositeSignal,
   LiquidityConfirmation,
   LiquidityMetrics,
+  LabeledValue,
   MovingAverageAnalysis,
   PriceTrendAnalysis,
   PriceTrendConfig,
   SellTimeframes,
+  StockAnalysisSignals,
   StochRsiAnalysis,
   StochRsiConfig,
   StockAnalysisResult,
   SymbolAnalysisParams
 } from '../types';
+import { createHash } from '../utils/hash';
 import { sortByDateAsc } from '../utils/dateSort';
 import { round } from '../utils/number';
 import {
@@ -197,6 +201,8 @@ export const getPriceTrendConfig = (): PriceTrendConfig => {
   };
 };
 
+const ANALYSIS_CACHE_SIGNATURE = 'signals-labeled-values';
+
 export const buildAnalysisConfigForCache = () => {
   return {
     buyThresholdPercent: env.BUY_THRESHOLD_PERCENT,
@@ -217,6 +223,22 @@ export const buildAnalysisConfigForCache = () => {
     stochRsi: getStochRsiConfig(),
     priceTrend: getPriceTrendConfig()
   };
+};
+
+export const buildAnalysisParamsHash = (
+  params: Pick<
+    SymbolAnalysisParams,
+    'weeklyWindow' | 'monthlyWindow' | 'quarterlyWindow' | 'includeRealLegal'
+  >
+) => {
+  return createHash({
+    weeklyWindow: params.weeklyWindow,
+    monthlyWindow: params.monthlyWindow,
+    quarterlyWindow: params.quarterlyWindow,
+    includeRealLegal: params.includeRealLegal,
+    analysisConfig: buildAnalysisConfigForCache(),
+    cacheSignature: ANALYSIS_CACHE_SIGNATURE
+  });
 };
 
 export const calculateSellTimeframes = (
@@ -246,6 +268,331 @@ export const calculateSellTimeframes = (
 
 const clampScore = (score: number): number => {
   return Math.max(-100, Math.min(100, score));
+};
+
+const labeledValue = <T>(value: T, label: string): LabeledValue<T> => ({
+  label,
+  value
+});
+
+const labeledBoolean = (
+  value: boolean,
+  trueLabel: string,
+  falseLabel: string
+): LabeledValue<boolean> => {
+  return labeledValue(value, value ? trueLabel : falseLabel);
+};
+
+const describeLabel = (concept: string, state: string): string => {
+  return `${concept}: ${state}`;
+};
+
+const regimeLabelMap: Record<AnalysisRegime, string> = {
+  STRONG_BULLISH_LIQUIDITY: 'صعودی قوی',
+  EARLY_BULLISH: 'شروع صعود',
+  CONFIRMED_BULLISH: 'صعود تاییدشده',
+  SHORT_TERM_WARNING: 'هشدار کوتاه‌مدت',
+  BEARISH_LIQUIDITY: 'نزولی',
+  NEUTRAL: 'خنثی'
+};
+
+const confidenceLabelMap: Record<AnalysisConfidence, string> = {
+  HIGH: 'بالا',
+  MEDIUM: 'متوسط',
+  LOW: 'پایین'
+};
+
+const compositeActionLabelMap: Record<CompositeSignal['action'], string> = {
+  STRONG_BUY: 'خرید قوی',
+  PROBABLE_BUY: 'خرید احتمالی',
+  HOLD: 'نگهداری',
+  CAUTION: 'احتیاط',
+  RISK_SELL: 'ریسک فروش',
+  CONFIRMED_SELL: 'فروش تاییدشده'
+};
+
+const stochRsiStatusLabelMap: Record<StochRsiAnalysis['status'], string> = {
+  OK: 'آماده',
+  INSUFFICIENT_DATA: 'داده ناکافی'
+};
+
+const stochRsiZoneLabelMap: Record<StochRsiAnalysis['latestZone'], string> = {
+  GREEN: 'سبز',
+  RED: 'قرمز',
+  NEUTRAL: 'خنثی',
+  UNKNOWN: 'نامشخص'
+};
+
+const priceTrendStatusLabelMap: Record<PriceTrendAnalysis['status'], string> = {
+  OK: 'آماده',
+  INSUFFICIENT_DATA: 'داده ناکافی'
+};
+
+const priceTrendDirectionLabelMap: Record<
+  PriceTrendAnalysis['direction'],
+  string
+> = {
+  BULLISH: 'صعودی',
+  IMPROVING: 'در حال بهبود',
+  NEUTRAL: 'خنثی',
+  WEAKENING: 'در حال تضعیف',
+  BEARISH: 'نزولی',
+  INSUFFICIENT_DATA: 'داده ناکافی'
+};
+
+const adxStatusLabelMap: Record<AdxAnalysis['status'], string> = {
+  OK: 'آماده',
+  INSUFFICIENT_DATA: 'داده ناکافی'
+};
+
+const adxTrendStrengthLabelMap: Record<AdxAnalysis['trendStrength'], string> = {
+  WEAK: 'ضعیف',
+  MODERATE: 'متوسط',
+  STRONG: 'قوی',
+  INSUFFICIENT_DATA: 'داده ناکافی'
+};
+
+const atrStatusLabelMap: Record<AtrAnalysis['status'], string> = {
+  OK: 'آماده',
+  INSUFFICIENT_DATA: 'داده ناکافی'
+};
+
+const atrVolatilityLabelMap: Record<AtrAnalysis['volatilityRegime'], string> = {
+  LOW: 'کم',
+  NORMAL: 'عادی',
+  HIGH: 'زیاد',
+  INSUFFICIENT_DATA: 'داده ناکافی'
+};
+
+const getAdxDirectionalBias = (
+  adx: AdxAnalysis
+): LabeledValue<AdxDirectionalBiasValue> => {
+  if (adx.bullishDirectionalBias) {
+    return labeledValue('BULLISH', describeLabel('جهت روند ADX', 'صعودی'));
+  }
+
+  if (adx.bearishDirectionalBias) {
+    return labeledValue('BEARISH', describeLabel('جهت روند ADX', 'نزولی'));
+  }
+
+  return labeledValue('NEUTRAL', describeLabel('جهت روند ADX', 'خنثی'));
+};
+
+const buildPresentationSignals = (
+  regime: AnalysisRegime,
+  confidence: AnalysisConfidence,
+  buy: BuyTimeframes,
+  sell: SellTimeframes,
+  stochRsi: StochRsiAnalysis,
+  priceTrend: PriceTrendAnalysis,
+  adx: AdxAnalysis,
+  atr: AtrAnalysis,
+  composite: CompositeSignal,
+  movingAverageAnalysis: MovingAverageAnalysis
+): StockAnalysisSignals => {
+  return {
+    regime: labeledValue(
+      regime,
+      describeLabel('رژیم نقدینگی', regimeLabelMap[regime])
+    ),
+    crossWeeklyAboveMonthly: labeledBoolean(
+      movingAverageAnalysis.crossWeeklyAboveMonthly,
+      describeLabel('عبور میانگین هفتگی از ماهانه', 'تقاطع صعودی'),
+      describeLabel('عبور میانگین هفتگی از ماهانه', 'بدون سیگنال')
+    ),
+    crossWeeklyBelowMonthly: labeledBoolean(
+      movingAverageAnalysis.crossWeeklyBelowMonthly,
+      describeLabel('عبور میانگین هفتگی زیر ماهانه', 'تقاطع نزولی'),
+      describeLabel('عبور میانگین هفتگی زیر ماهانه', 'بدون سیگنال')
+    ),
+    crossMonthlyAboveQuarterly: labeledBoolean(
+      movingAverageAnalysis.crossMonthlyAboveQuarterly,
+      describeLabel('عبور میانگین ماهانه از فصلی', 'تقاطع صعودی'),
+      describeLabel('عبور میانگین ماهانه از فصلی', 'بدون سیگنال')
+    ),
+    crossMonthlyBelowQuarterly: labeledBoolean(
+      movingAverageAnalysis.crossMonthlyBelowQuarterly,
+      describeLabel('عبور میانگین ماهانه زیر فصلی', 'تقاطع نزولی'),
+      describeLabel('عبور میانگین ماهانه زیر فصلی', 'بدون سیگنال')
+    ),
+    confidence: labeledValue(
+      confidence,
+      describeLabel('سطح اطمینان تحلیل', confidenceLabelMap[confidence])
+    ),
+    buy: {
+      shortTerm: labeledBoolean(
+        buy.shortTerm,
+        describeLabel('خرید کوتاه‌مدت', 'فعال'),
+        describeLabel('خرید کوتاه‌مدت', 'غیرفعال')
+      ),
+      midTerm: labeledBoolean(
+        buy.midTerm,
+        describeLabel('خرید میان‌مدت', 'فعال'),
+        describeLabel('خرید میان‌مدت', 'غیرفعال')
+      ),
+      longTerm: labeledBoolean(
+        buy.longTerm,
+        describeLabel('خرید بلندمدت', 'فعال'),
+        describeLabel('خرید بلندمدت', 'غیرفعال')
+      )
+    },
+    sell: {
+      shortTerm: labeledBoolean(
+        sell.shortTerm,
+        describeLabel('فروش کوتاه‌مدت', 'فعال'),
+        describeLabel('فروش کوتاه‌مدت', 'غیرفعال')
+      ),
+      midTerm: labeledBoolean(
+        sell.midTerm,
+        describeLabel('فروش میان‌مدت', 'فعال'),
+        describeLabel('فروش میان‌مدت', 'غیرفعال')
+      ),
+      longTerm: labeledBoolean(
+        sell.longTerm,
+        describeLabel('فروش بلندمدت', 'فعال'),
+        describeLabel('فروش بلندمدت', 'غیرفعال')
+      )
+    },
+    stochRsi: {
+      ...stochRsi,
+      status: labeledValue(
+        stochRsi.status,
+        describeLabel(
+          'وضعیت محاسبه Stoch RSI',
+          stochRsiStatusLabelMap[stochRsi.status]
+        )
+      ),
+      latestZone: labeledValue(
+        stochRsi.latestZone,
+        describeLabel('ناحیه فعلی Stoch RSI', stochRsiZoneLabelMap[stochRsi.latestZone])
+      ),
+      crossUpInGreen: labeledBoolean(
+        stochRsi.crossUpInGreen,
+        describeLabel('تقاطع صعودی در ناحیه سبز', 'فعال'),
+        describeLabel('تقاطع صعودی در ناحیه سبز', 'بدون سیگنال')
+      ),
+      crossDownInRed: labeledBoolean(
+        stochRsi.crossDownInRed,
+        describeLabel('تقاطع نزولی در ناحیه قرمز', 'فعال'),
+        describeLabel('تقاطع نزولی در ناحیه قرمز', 'بدون سیگنال')
+      ),
+      probableBuy: labeledBoolean(
+        stochRsi.probableBuy,
+        describeLabel('آمادگی خرید Stoch RSI', 'فعال'),
+        describeLabel('آمادگی خرید Stoch RSI', 'غیرفعال')
+      ),
+      riskSell: labeledBoolean(
+        stochRsi.riskSell,
+        describeLabel('ریسک فروش Stoch RSI', 'فعال'),
+        describeLabel('ریسک فروش Stoch RSI', 'غیرفعال')
+      ),
+      confirmedSell: labeledBoolean(
+        stochRsi.confirmedSell,
+        describeLabel('فروش تاییدشده Stoch RSI', 'فعال'),
+        describeLabel('فروش تاییدشده Stoch RSI', 'غیرفعال')
+      )
+    },
+    priceTrend: {
+      ...priceTrend,
+      status: labeledValue(
+        priceTrend.status,
+        describeLabel(
+          'وضعیت محاسبه روند قیمت',
+          priceTrendStatusLabelMap[priceTrend.status]
+        )
+      ),
+      direction: labeledValue(
+        priceTrend.direction,
+        describeLabel(
+          'جهت روند قیمت',
+          priceTrendDirectionLabelMap[priceTrend.direction]
+        )
+      ),
+      closeAboveFastMa: labeledBoolean(
+        priceTrend.closeAboveFastMa,
+        describeLabel('قیمت نسبت به میانگین سریع', 'بالاتر'),
+        describeLabel('قیمت نسبت به میانگین سریع', 'پایین‌تر')
+      ),
+      closeAboveMidMa: labeledBoolean(
+        priceTrend.closeAboveMidMa,
+        describeLabel('قیمت نسبت به میانگین میانی', 'بالاتر'),
+        describeLabel('قیمت نسبت به میانگین میانی', 'پایین‌تر')
+      ),
+      closeAboveLongMa: labeledBoolean(
+        priceTrend.closeAboveLongMa,
+        describeLabel('قیمت نسبت به میانگین بلند', 'بالاتر'),
+        describeLabel('قیمت نسبت به میانگین بلند', 'پایین‌تر')
+      ),
+      fastAboveMidMa: labeledBoolean(
+        priceTrend.fastAboveMidMa,
+        describeLabel('میانگین سریع نسبت به میانی', 'بالاتر'),
+        describeLabel('میانگین سریع نسبت به میانی', 'پایین‌تر')
+      ),
+      midAboveLongMa: labeledBoolean(
+        priceTrend.midAboveLongMa,
+        describeLabel('میانگین میانی نسبت به بلند', 'بالاتر'),
+        describeLabel('میانگین میانی نسبت به بلند', 'پایین‌تر')
+      ),
+      bullish: labeledBoolean(
+        priceTrend.bullish,
+        describeLabel('سیگنال صعودی روند قیمت', 'فعال'),
+        describeLabel('سیگنال صعودی روند قیمت', 'غیرفعال')
+      ),
+      bearish: labeledBoolean(
+        priceTrend.bearish,
+        describeLabel('سیگنال نزولی روند قیمت', 'فعال'),
+        describeLabel('سیگنال نزولی روند قیمت', 'غیرفعال')
+      ),
+      warning: labeledBoolean(
+        priceTrend.warning,
+        describeLabel('هشدار روند قیمت', 'فعال'),
+        describeLabel('هشدار روند قیمت', 'عادی')
+      )
+    },
+    adx: {
+      ...adx,
+      status: labeledValue(
+        adx.status,
+        describeLabel('وضعیت محاسبه ADX', adxStatusLabelMap[adx.status])
+      ),
+      trendStrength: labeledValue(
+        adx.trendStrength,
+        describeLabel('قدرت روند ADX', adxTrendStrengthLabelMap[adx.trendStrength])
+      ),
+      directionalBias: getAdxDirectionalBias(adx),
+      bullishDirectionalBias: labeledBoolean(
+        adx.bullishDirectionalBias,
+        describeLabel('غلبه صعودی ADX', 'فعال'),
+        describeLabel('غلبه صعودی ADX', 'غیرفعال')
+      ),
+      bearishDirectionalBias: labeledBoolean(
+        adx.bearishDirectionalBias,
+        describeLabel('غلبه نزولی ADX', 'فعال'),
+        describeLabel('غلبه نزولی ADX', 'غیرفعال')
+      )
+    },
+    atr: {
+      ...atr,
+      status: labeledValue(
+        atr.status,
+        describeLabel('وضعیت محاسبه ATR', atrStatusLabelMap[atr.status])
+      ),
+      volatilityRegime: labeledValue(
+        atr.volatilityRegime,
+        describeLabel(
+          'وضعیت نوسان ATR',
+          atrVolatilityLabelMap[atr.volatilityRegime]
+        )
+      )
+    },
+    composite: {
+      ...composite,
+      action: labeledValue(
+        composite.action,
+        describeLabel('اقدام نهایی تحلیل', compositeActionLabelMap[composite.action])
+      )
+    }
+  };
 };
 
 export const calculateCompositeSignal = (
@@ -581,14 +928,8 @@ export const analyzeSymbolMetrics = (
       liquidityExpansion: liquidityConfirmation.liquidityExpansion,
       liquidityContraction: liquidityConfirmation.liquidityContraction
     },
-    signals: {
+    signals: buildPresentationSignals(
       regime,
-      crossWeeklyAboveMonthly: movingAverageAnalysis.crossWeeklyAboveMonthly,
-      crossWeeklyBelowMonthly: movingAverageAnalysis.crossWeeklyBelowMonthly,
-      crossMonthlyAboveQuarterly:
-        movingAverageAnalysis.crossMonthlyAboveQuarterly,
-      crossMonthlyBelowQuarterly:
-        movingAverageAnalysis.crossMonthlyBelowQuarterly,
       confidence,
       buy,
       sell,
@@ -596,8 +937,9 @@ export const analyzeSymbolMetrics = (
       priceTrend,
       adx,
       atr,
-      composite
-    },
+      composite,
+      movingAverageAnalysis
+    ),
     persianSummary: buildPersianSummary(
       symbol,
       regime,

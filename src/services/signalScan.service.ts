@@ -5,10 +5,9 @@ import { logger } from '../lib/logger';
 import { analysisCacheRepository } from '../repositories/analysisCache.repository';
 import { symbolRepository } from '../repositories/symbol.repository';
 import type { SymbolAnalysisParams } from '../types';
-import { createHash } from '../utils/hash';
 import {
   analyzeSymbolMetrics,
-  buildAnalysisConfigForCache,
+  buildAnalysisParamsHash,
   InsufficientDataError
 } from './analysis.service';
 import { symbolDataService } from './symbolData.service';
@@ -81,13 +80,7 @@ export const signalScanService = {
       options?.includeRealLegal ?? env.SIGNAL_SCAN_INCLUDE_REAL_LEGAL;
     const symbols = await buildWatchlist(options?.symbols);
     const params = buildScanParams(forceRefresh, includeRealLegal);
-    const paramsHash = createHash({
-      weeklyWindow: params.weeklyWindow,
-      monthlyWindow: params.monthlyWindow,
-      quarterlyWindow: params.quarterlyWindow,
-      includeRealLegal: params.includeRealLegal,
-      analysisConfig: buildAnalysisConfigForCache()
-    });
+    const paramsHash = buildAnalysisParamsHash(params);
     const results: SignalScanItem[] = [];
 
     for (const symbol of symbols) {
@@ -117,14 +110,14 @@ export const signalScanService = {
         results.push({
           symbol,
           status: 'OK',
-          action: result.signals.composite.action,
+          action: result.signals.composite.action.value,
           score: result.signals.composite.score,
           latestDataDate: result.latestDataDate
         });
         logger.info(
           {
             symbol,
-            action: result.signals.composite.action,
+            action: result.signals.composite.action.value,
             score: result.signals.composite.score,
             latestDataDate: result.latestDataDate
           },
