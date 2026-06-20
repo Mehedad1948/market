@@ -176,6 +176,24 @@ curl -X POST "http://localhost:3000/api/auth/logout" \
   -H "Authorization: Bearer YOUR_SESSION_TOKEN"
 ```
 
+### Import Symbols Manually
+
+```bash
+curl -X POST "http://localhost:3000/api/symbols/import"
+```
+
+### Get Grouped Symbols
+
+```bash
+curl "http://localhost:3000/api/symbols/grouped"
+```
+
+### Search Symbols
+
+```bash
+curl "http://localhost:3000/api/symbols/search?q=%D8%AE%D9%88%D8%AF%D8%B1%D9%88"
+```
+
 ### Symbol Analysis
 
 ```bash

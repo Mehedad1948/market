@@ -3,6 +3,7 @@ import axios, { AxiosError } from 'axios';
 import { env } from '../config/env';
 import { logger, maskSecret } from '../lib/logger';
 import type { BrsHistoryTradeRow, BrsRealLegalRow } from '../types';
+import type { BrsAllSymbolItem } from '../types/symbolCatalog';
 
 export class BrsApiError extends Error {
   details: Record<string, unknown> | undefined;
@@ -137,7 +138,76 @@ const fetchHistory = async <T>(symbol: string, type: 0 | 1): Promise<T[]> => {
   }
 };
 
+const fetchAllSymbols = async (type = 1): Promise<BrsAllSymbolItem[]> => {
+  const startedAt = Date.now();
+  const endpoint = '/AllSymbols.php';
+  const requestMeta = {
+    endpoint,
+    type,
+    baseURL: env.BRS_BASE_URL,
+    timeoutMs: client.defaults.timeout,
+    apiKeyConfigured: Boolean(env.BRS_API_KEY),
+    apiKeyPreview: maskSecret(env.BRS_API_KEY)
+  };
+
+  try {
+    logger.info(requestMeta, '🌐 BrsApi symbols request started');
+
+    const response = await client.get(endpoint, {
+      params: {
+        key: env.BRS_API_KEY,
+        type
+      }
+    });
+
+    const normalized = normalizeArrayResponse<BrsAllSymbolItem>(response.data);
+    const durationMs = Date.now() - startedAt;
+
+    logger.info(
+      {
+        ...requestMeta,
+        durationMs,
+        httpStatus: response.status,
+        responseSummary: summarizePayload(response.data),
+        normalizedRowCount: normalized.length
+      },
+      normalized.length > 0
+        ? '✅ BrsApi symbols request succeeded'
+        : '⚠️ BrsApi symbols request returned zero normalized rows'
+    );
+
+    return normalized;
+  } catch (error) {
+    if (error instanceof AxiosError) {
+      const details = {
+        ...requestMeta,
+        durationMs: Date.now() - startedAt,
+        axiosCode: error.code,
+        httpStatus: error.response?.status ?? null,
+        statusText: error.response?.statusText ?? null,
+        responseSummary: summarizePayload(error.response?.data),
+        message: error.message
+      };
+
+      logger.error({ err: error, ...details }, '🚨 BrsApi symbols request failed');
+      throw new BrsApiError(error.message, details);
+    }
+
+    logger.error(
+      {
+        err: error,
+        ...requestMeta,
+        durationMs: Date.now() - startedAt
+      },
+      '🚨 Unexpected BrsApi symbols client failure'
+    );
+
+    throw new BrsApiError('Failed to fetch symbols from BrsApi', requestMeta);
+  }
+};
+
 export const brsClient = {
   fetchTradeHistory: (symbol: string) => fetchHistory<BrsHistoryTradeRow>(symbol, 0),
-  fetchRealLegalHistory: (symbol: string) => fetchHistory<BrsRealLegalRow>(symbol, 1)
+  fetchRealLegalHistory: (symbol: string) => fetchHistory<BrsRealLegalRow>(symbol, 1),
+  fetchAllSymbols
 };

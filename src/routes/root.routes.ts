@@ -25,6 +25,22 @@ const samples: RequestSample[] = [
     body: {}
   },
   {
+    title: 'Import Symbols Catalog',
+    method: 'POST',
+    path: '/api/symbols/import',
+    body: {}
+  },
+  {
+    title: 'Grouped Symbols Catalog',
+    method: 'GET',
+    path: '/api/symbols/grouped'
+  },
+  {
+    title: 'Search Symbols Catalog',
+    method: 'GET',
+    path: '/api/symbols/search?q=%D8%AE%D9%88%D8%AF%D8%B1%D9%88'
+  },
+  {
     title: 'Analyze Symbol - Default Windows',
     method: 'GET',
     path: '/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis'
