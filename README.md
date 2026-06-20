@@ -81,7 +81,13 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/iran_stock_analysis
 BRS_API_KEY=your_key_here
 BRS_BASE_URL=https://Api.BrsApi.ir/Tsetmc
 CACHE_TTL_SECONDS=86400
+ANALYSIS_REQUEST_RETENTION_DAYS=30
+ANALYSIS_CACHE_RETENTION_DAYS=7
 HISTORY_MAX_AGE_HOURS=24
+MARKET_HOURS_HISTORY_MAX_AGE_MINUTES=15
+MARKET_TIMEZONE=Asia/Tehran
+MARKET_OPEN_TIME=09:00
+MARKET_CLOSE_TIME=12:30
 DEFAULT_WEEKLY_WINDOW=7
 DEFAULT_MONTHLY_WINDOW=30
 DEFAULT_QUARTERLY_WINDOW=90
@@ -249,6 +255,18 @@ Within each timeframe:
 - `action`: the current operational state
 - `decision`: explicit boolean flags for UI and rules engines
 - `positionAdvice`: separate advice for new entries versus already-held positions
+
+## Freshness And Retention
+
+Analysis requests use the stored database history when it is still fresh enough. Outside market hours, freshness uses `HISTORY_MAX_AGE_HOURS`. During market hours in `MARKET_TIMEZONE`, the service switches to the shorter `MARKET_HOURS_HISTORY_MAX_AGE_MINUTES` threshold.
+
+The service also performs best-effort background cleanup:
+
+- `AnalysisCache` rows are pruned when `expiresAt` has passed
+- `AnalysisCache` rows older than `ANALYSIS_CACHE_RETENTION_DAYS` are deleted
+- `AnalysisRequest` logs older than `ANALYSIS_REQUEST_RETENTION_DAYS` are deleted
+
+Cleanup is non-blocking in request handlers and does not change the response shape.
 
 Composite actions:
 

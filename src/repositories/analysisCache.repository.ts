@@ -42,5 +42,25 @@ export const analysisCacheRepository = {
         expiresAt
       }
     });
+  },
+
+  async deleteExpired(now = new Date()) {
+    return prisma.analysisCache.deleteMany({
+      where: {
+        expiresAt: {
+          lt: now
+        }
+      }
+    });
+  },
+
+  async deleteOlderThan(cutoff: Date) {
+    return prisma.analysisCache.deleteMany({
+      where: {
+        createdAt: {
+          lt: cutoff
+        }
+      }
+    });
   }
 };

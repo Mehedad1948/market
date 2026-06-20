@@ -114,5 +114,15 @@ export const symbolRepository = {
     return prisma.analysisRequest.create({
       data: params
     });
+  },
+
+  async deleteAnalysisRequestsOlderThan(cutoff: Date) {
+    return prisma.analysisRequest.deleteMany({
+      where: {
+        createdAt: {
+          lt: cutoff
+        }
+      }
+    });
   }
 };

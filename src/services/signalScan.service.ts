@@ -4,7 +4,7 @@ import { env } from '../config/env';
 import { logger } from '../lib/logger';
 import { analysisCacheRepository } from '../repositories/analysisCache.repository';
 import { symbolRepository } from '../repositories/symbol.repository';
-import type { SymbolAnalysisParams } from '../types';
+import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
 import {
   analyzeSymbolMetrics,
   buildAnalysisParamsHash,
@@ -90,6 +90,38 @@ export const signalScanService = {
         }
 
         const history = await symbolRepository.getSymbolHistory(symbol);
+        const latestDataDate = history.at(-1)?.date ?? null;
+
+        if (!forceRefresh && latestDataDate) {
+          const activeCache = await analysisCacheRepository.getActiveCache(
+            symbol,
+            paramsHash,
+            latestDataDate
+          );
+
+          if (activeCache && activeCache.expiresAt > new Date()) {
+            const cachedResult = activeCache.result as StockAnalysisResult;
+
+            results.push({
+              symbol,
+              status: 'OK',
+              action: cachedResult.signals.composite.action.value,
+              score: cachedResult.signals.composite.score,
+              latestDataDate: cachedResult.latestDataDate
+            });
+            logger.info(
+              {
+                symbol,
+                action: cachedResult.signals.composite.action.value,
+                score: cachedResult.signals.composite.score,
+                latestDataDate: cachedResult.latestDataDate
+              },
+              'Signal scan cache hit'
+            );
+            continue;
+          }
+        }
+
         const result = analyzeSymbolMetrics(
           symbol,
           history,

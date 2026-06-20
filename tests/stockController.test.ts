@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Prisma } from '@prisma/client';
 
 import {
+  isWithinMarketHours,
   isDatabaseUnavailableError,
   isHistoryStale
 } from '../src/controllers/stock.controller';
@@ -33,6 +34,42 @@ describe('stock.controller history freshness', () => {
 
     expect(isHistoryStale(history, new Date('2026-06-19T12:00:00.000Z'))).toBe(
       true
+    );
+  });
+
+  it('uses the market-hours minute threshold during market hours', () => {
+    const history = [
+      {
+        updatedAt: new Date('2026-06-19T05:35:00.000Z')
+      }
+    ];
+
+    expect(isWithinMarketHours(
+      new Date('2026-06-19T06:00:00.000Z'),
+      'Asia/Tehran',
+      '09:00',
+      '12:30'
+    )).toBe(true);
+    expect(isHistoryStale(history, new Date('2026-06-19T06:00:00.000Z'))).toBe(
+      true
+    );
+  });
+
+  it('uses the hourly threshold outside market hours', () => {
+    const history = [
+      {
+        updatedAt: new Date('2026-06-18T16:30:00.000Z')
+      }
+    ];
+
+    expect(isWithinMarketHours(
+      new Date('2026-06-19T12:00:00.000Z'),
+      'Asia/Tehran',
+      '09:00',
+      '12:30'
+    )).toBe(false);
+    expect(isHistoryStale(history, new Date('2026-06-19T12:00:00.000Z'))).toBe(
+      false
     );
   });
 });

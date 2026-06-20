@@ -11,6 +11,7 @@ import {
   analyzeSymbolMetrics,
   buildAnalysisParamsHash
 } from '../services/analysis.service';
+import { maintenanceService } from '../services/maintenance.service';
 import { signalScanService } from '../services/signalScan.service';
 import { symbolDataService } from '../services/symbolData.service';
 import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
@@ -130,10 +131,58 @@ export const isHistoryStale = (
     return row.updatedAt > latest ? row.updatedAt : latest;
   }, history[0]!.updatedAt);
 
-  return (
-    now.getTime() - latestUpdatedAt.getTime() >=
-    env.HISTORY_MAX_AGE_HOURS * 60 * 60 * 1000
+  const ageMs = now.getTime() - latestUpdatedAt.getTime();
+  const maxAgeMs = isWithinMarketHours(
+    now,
+    env.MARKET_TIMEZONE,
+    env.MARKET_OPEN_TIME,
+    env.MARKET_CLOSE_TIME
+  )
+    ? env.MARKET_HOURS_HISTORY_MAX_AGE_MINUTES * 60 * 1000
+    : env.HISTORY_MAX_AGE_HOURS * 60 * 60 * 1000;
+
+  return ageMs >= maxAgeMs;
+};
+
+const getMarketClockParts = (now: Date, timezone: string) => {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? '0');
+  const minute = Number(
+    parts.find((part) => part.type === 'minute')?.value ?? '0'
   );
+
+  return { hour, minute };
+};
+
+const parseClockMinutes = (value: string): number => {
+  const [hours = 0, minutes = 0] = value.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+export const isWithinMarketHours = (
+  now: Date,
+  timezone: string,
+  openTime: string,
+  closeTime: string
+): boolean => {
+  const { hour, minute } = getMarketClockParts(now, timezone);
+  const currentMinutes = hour * 60 + minute;
+  const openMinutes = parseClockMinutes(openTime);
+  const closeMinutes = parseClockMinutes(closeTime);
+
+  return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
+};
+
+const triggerMaintenanceCleanup = () => {
+  void maintenanceService.cleanupAnalysisStorage().catch((error) => {
+    logger.warn({ err: error }, 'Analysis storage cleanup failed');
+  });
 };
 
 const persistRequestLog = async (
@@ -303,6 +352,7 @@ export const getStockAnalysis = async (
           },
         '⚡ Analysis cache hit'
       );
+      triggerMaintenanceCleanup();
       response.json(finalResult);
       return;
       }
@@ -383,6 +433,7 @@ export const getStockAnalysis = async (
     }
   }
 
+  triggerMaintenanceCleanup();
   response.json(result);
 };
 

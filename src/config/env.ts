@@ -13,7 +13,17 @@ const envSchema = z.object({
   BRS_API_KEY: z.string().min(1),
   BRS_BASE_URL: z.string().url(),
   CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(86400),
+  ANALYSIS_REQUEST_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  ANALYSIS_CACHE_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
   HISTORY_MAX_AGE_HOURS: z.coerce.number().int().positive().default(24),
+  MARKET_HOURS_HISTORY_MAX_AGE_MINUTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15),
+  MARKET_TIMEZONE: z.string().min(1).default('Asia/Tehran'),
+  MARKET_OPEN_TIME: z.string().regex(/^\d{2}:\d{2}$/).default('09:00'),
+  MARKET_CLOSE_TIME: z.string().regex(/^\d{2}:\d{2}$/).default('12:30'),
   DEFAULT_WEEKLY_WINDOW: z.coerce.number().int().positive().default(7),
   DEFAULT_MONTHLY_WINDOW: z.coerce.number().int().positive().default(30),
   DEFAULT_QUARTERLY_WINDOW: z.coerce.number().int().positive().default(90),
