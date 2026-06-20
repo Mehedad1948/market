@@ -7,7 +7,8 @@ import type {
   CompositeSignal,
   LiquidityConfirmation,
   PriceTrendAnalysis,
-  StochRsiAnalysis
+  StochRsiAnalysis,
+  TimeframeComposite
 } from '../types';
 
 const DISCLAIMER =
@@ -119,6 +120,92 @@ const generateCompositePersianSummary = (
   return compositeMessageByAction[composite.action];
 };
 
+const generateHorizonSummary = (
+  horizon: 'کوتاه‌مدت' | 'میان‌مدت' | 'بلندمدت',
+  timeframe: TimeframeComposite
+): string => {
+  if (horizon === 'کوتاه‌مدت') {
+    if (timeframe.action === 'BUY') {
+      return 'جمع‌بندی کوتاه‌مدت: شرایط ورود کوتاه‌مدت آماده و مومنتوم خرید فعال است.';
+    }
+
+    if (timeframe.action === 'PROBABLE_BUY') {
+      return 'جمع‌بندی کوتاه‌مدت: نشانه‌های ورود کوتاه‌مدت دیده می‌شود، اما هنوز بهتر است با تایید بیشتر اقدام شود.';
+    }
+
+    if (timeframe.action === 'CAUTION') {
+      return 'جمع‌بندی کوتاه‌مدت: ریسک نوسان یا هشدار کوتاه‌مدت دیده می‌شود و باید با احتیاط عمل کرد.';
+    }
+
+    if (timeframe.action === 'REDUCE' || timeframe.action === 'EXIT') {
+      return 'جمع‌بندی کوتاه‌مدت: فشار خروج کوتاه‌مدت فعال شده و کاهش موقعیت یا خروج قابل بررسی است.';
+    }
+
+    if (timeframe.action === 'HOLD') {
+      return 'جمع‌بندی کوتاه‌مدت: وضعیت کوتاه‌مدت بد نیست، اما هنوز سیگنال ورود تازه و قوی دیده نمی‌شود.';
+    }
+
+    return 'جمع‌بندی کوتاه‌مدت: سیگنال ورود تازه فعال نیست و بهتر است برای اصلاح یا کراس مناسب‌تر صبر شود.';
+  }
+
+  if (horizon === 'میان‌مدت') {
+    if (timeframe.action === 'BUY') {
+      return 'جمع‌بندی میان‌مدت: روند و نقدینگی برای ورود میان‌مدت مناسب ارزیابی می‌شود.';
+    }
+
+    if (timeframe.action === 'PROBABLE_BUY' || timeframe.action === 'HOLD') {
+      return timeframe.quality === 'STRONG_BULLISH' ||
+        timeframe.quality === 'BULLISH'
+        ? 'جمع‌بندی میان‌مدت: وضعیت روند و نقدینگی مثبت است و نگهداری سهم قابل قبول ارزیابی می‌شود.'
+        : 'جمع‌بندی میان‌مدت: وضعیت میان‌مدت قابل قبول است، اما هنوز کیفیت روند برای ورود پرقدرت کامل نیست.';
+    }
+
+    if (timeframe.action === 'CAUTION') {
+      return 'جمع‌بندی میان‌مدت: برخی هشدارهای روند یا مومنتوم دیده می‌شود و بهتر است محتاطانه پیگیری شود.';
+    }
+
+    if (timeframe.action === 'REDUCE' || timeframe.action === 'EXIT') {
+      return 'جمع‌بندی میان‌مدت: کیفیت نگهداری میان‌مدت تضعیف شده و کاهش موقعیت یا خروج باید بررسی شود.';
+    }
+
+    return 'جمع‌بندی میان‌مدت: هنوز شواهد کافی برای ورود یا نگهداری قوی میان‌مدت دیده نمی‌شود.';
+  }
+
+  if (timeframe.action === 'BUY') {
+    return 'جمع‌بندی بلندمدت: ساختار کلی سهم صعودی و مناسب نگهداری یا اضافه‌کردن موقعیت ارزیابی می‌شود.';
+  }
+
+  if (timeframe.action === 'PROBABLE_BUY' || timeframe.action === 'HOLD') {
+    return timeframe.quality === 'STRONG_BULLISH'
+      ? 'جمع‌بندی بلندمدت: ساختار کلی سهم همچنان صعودی و قدرتمند است.'
+      : 'جمع‌بندی بلندمدت: ساختار بلندمدت سهم هنوز مثبت است و نگهداری آن قابل دفاع ارزیابی می‌شود.';
+  }
+
+  if (timeframe.action === 'CAUTION') {
+    return 'جمع‌بندی بلندمدت: روند اصلی هنوز کاملا تخریب نشده، اما نشانه‌هایی از احتیاط در افق بلندمدت دیده می‌شود.';
+  }
+
+  if (timeframe.action === 'REDUCE' || timeframe.action === 'EXIT') {
+    return 'جمع‌بندی بلندمدت: ساختار روند بلندمدت تضعیف شده و نگهداری پرریسک‌تر شده است.';
+  }
+
+  return 'جمع‌بندی بلندمدت: هنوز کیفیت کافی برای تصمیم‌گیری مثبت بلندمدت دیده نمی‌شود.';
+};
+
+const generateCompositeHorizonSummaries = (
+  composite?: CompositeSignal
+): string[] => {
+  if (!composite) {
+    return [];
+  }
+
+  return [
+    generateHorizonSummary('کوتاه‌مدت', composite.timeframes.shortTerm),
+    generateHorizonSummary('میان‌مدت', composite.timeframes.midTerm),
+    generateHorizonSummary('بلندمدت', composite.timeframes.longTerm)
+  ];
+};
+
 const generateAdxPersianSummary = (adx?: AdxAnalysis): string | null => {
   if (!adx || adx.status === 'INSUFFICIENT_DATA') {
     return null;
@@ -209,6 +296,8 @@ export const buildPersianSummary = (
   if (compositeMessage) {
     parts.push(compositeMessage);
   }
+
+  parts.push(...generateCompositeHorizonSummaries(composite));
 
   const adxMessage = generateAdxPersianSummary(adx);
   if (adxMessage) {

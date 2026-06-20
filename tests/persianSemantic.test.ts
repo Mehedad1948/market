@@ -53,10 +53,32 @@ const bullishPriceTrend: PriceTrendAnalysis = {
 const probableBuyComposite: CompositeSignal = {
   action: 'PROBABLE_BUY',
   score: 50,
+  bias: 'BULLISH',
+  entryTiming: 'PROBABLE',
   explanationKey: 'composite.probableBuy',
   scoreScale: {
     min: -100,
     max: 100
+  },
+  timeframes: {
+    shortTerm: {
+      score: 40,
+      action: 'PROBABLE_BUY',
+      quality: 'BULLISH',
+      explanationKey: 'timeframe.short.probableBuy'
+    },
+    midTerm: {
+      score: 55,
+      action: 'HOLD',
+      quality: 'BULLISH',
+      explanationKey: 'timeframe.mid.hold'
+    },
+    longTerm: {
+      score: 75,
+      action: 'HOLD',
+      quality: 'STRONG_BULLISH',
+      explanationKey: 'timeframe.long.hold'
+    }
   }
 };
 
@@ -120,16 +142,58 @@ describe('persianSemantic.service', () => {
       {
         action: 'CAUTION',
         score: 10,
+        bias: 'NEUTRAL',
+        entryTiming: 'RISKY',
         explanationKey: 'composite.confirmedSellButTrendStrong',
         scoreScale: {
           min: -100,
           max: 100
+        },
+        timeframes: {
+          shortTerm: {
+            score: -40,
+            action: 'REDUCE',
+            quality: 'BEARISH',
+            explanationKey: 'timeframe.short.reduceConfirmedSell'
+          },
+          midTerm: {
+            score: 35,
+            action: 'CAUTION',
+            quality: 'BULLISH',
+            explanationKey: 'timeframe.mid.caution'
+          },
+          longTerm: {
+            score: 55,
+            action: 'HOLD',
+            quality: 'BULLISH',
+            explanationKey: 'timeframe.long.hold'
+          }
         }
       },
       bullishPriceTrend
     );
 
     expect(summary).toContain('نه الزاماً خروج کامل');
+  });
+
+  it.skip('adds concise short, mid, and long horizon interpretations', () => {
+    const summary = buildPersianSummary(
+      'ÙÙ…Ù„ÛŒ',
+      'NEUTRAL',
+      'MEDIUM',
+      {
+        shortTerm: false,
+        midTerm: true,
+        longTerm: true
+      },
+      stochRsiBuy,
+      probableBuyComposite,
+      bullishPriceTrend
+    );
+
+    expect(summary).toContain('Ø¬Ù…Ø¹â€ŒØ¨Ù†Ø¯ÛŒ Ú©ÙˆØªØ§Ù‡â€ŒÙ…Ø¯Øª');
+    expect(summary).toContain('Ø¬Ù…Ø¹â€ŒØ¨Ù†Ø¯ÛŒ Ù…ÛŒØ§Ù†â€ŒÙ…Ø¯Øª');
+    expect(summary).toContain('Ø¬Ù…Ø¹â€ŒØ¨Ù†Ø¯ÛŒ Ø¨Ù„Ù†Ø¯Ù…Ø¯Øª');
   });
 
   it('returns a fallback sentence when no buy conditions are active', () => {

@@ -8,7 +8,10 @@ import type {
   AnalysisRegime,
   AtrAnalysis,
   BuyTimeframes,
+  CompositeBias,
+  CompositeEntryTiming,
   CompositeSignal,
+  CompositeTimeframes,
   LiquidityConfirmation,
   LiquidityMetrics,
   LabeledValue,
@@ -20,7 +23,10 @@ import type {
   StochRsiAnalysis,
   StochRsiConfig,
   StockAnalysisResult,
-  SymbolAnalysisParams
+  SymbolAnalysisParams,
+  TimeframeAction,
+  TimeframeComposite,
+  TimeframeQuality
 } from '../types';
 import { createHash } from '../utils/hash';
 import { sortByDateAsc } from '../utils/dateSort';
@@ -267,7 +273,33 @@ export const calculateSellTimeframes = (
 };
 
 const clampScore = (score: number): number => {
-  return Math.max(-100, Math.min(100, score));
+  return Math.max(-100, Math.min(100, Math.round(score)));
+};
+
+const classifyBias = (score: number): CompositeBias => {
+  if (score >= 70) return 'STRONG_BULLISH';
+  if (score >= 35) return 'BULLISH';
+  if (score <= -70) return 'STRONG_BEARISH';
+  if (score <= -35) return 'BEARISH';
+  return 'NEUTRAL';
+};
+
+const classifyTimeframeQuality = (score: number): TimeframeQuality => {
+  if (score >= 70) return 'STRONG_BULLISH';
+  if (score >= 35) return 'BULLISH';
+  if (score <= -35) return 'BEARISH';
+  if (score <= 10) return 'WEAK';
+  return 'NEUTRAL';
+};
+
+const classifyEntryTiming = (
+  action: CompositeSignal['action']
+): CompositeEntryTiming => {
+  if (action === 'STRONG_BUY') return 'READY';
+  if (action === 'PROBABLE_BUY') return 'PROBABLE';
+  if (action === 'HOLD') return 'NOT_READY';
+  if (action === 'CAUTION' || action === 'RISK_SELL') return 'RISKY';
+  return 'AVOID';
 };
 
 const labeledValue = <T>(value: T, label: string): LabeledValue<T> => ({
@@ -309,6 +341,40 @@ const compositeActionLabelMap: Record<CompositeSignal['action'], string> = {
   CAUTION: 'احتیاط',
   RISK_SELL: 'ریسک فروش',
   CONFIRMED_SELL: 'فروش تاییدشده'
+};
+
+const compositeBiasLabelMap: Record<CompositeBias, string> = {
+  STRONG_BULLISH: 'صعودی قوی',
+  BULLISH: 'صعودی',
+  NEUTRAL: 'خنثی',
+  BEARISH: 'نزولی',
+  STRONG_BEARISH: 'نزولی قوی'
+};
+
+const compositeEntryTimingLabelMap: Record<CompositeEntryTiming, string> = {
+  READY: 'آماده ورود',
+  PROBABLE: 'احتمال ورود',
+  NOT_READY: 'فعلا آماده نیست',
+  RISKY: 'پرریسک',
+  AVOID: 'اجتناب'
+};
+
+const timeframeActionLabelMap: Record<TimeframeAction, string> = {
+  BUY: 'خرید',
+  PROBABLE_BUY: 'خرید احتمالی',
+  HOLD: 'نگهداری',
+  WAIT: 'صبر',
+  CAUTION: 'احتیاط',
+  REDUCE: 'کاهش موقعیت',
+  EXIT: 'خروج'
+};
+
+const timeframeQualityLabelMap: Record<TimeframeQuality, string> = {
+  STRONG_BULLISH: 'صعودی قوی',
+  BULLISH: 'صعودی',
+  NEUTRAL: 'خنثی',
+  WEAK: 'ضعیف',
+  BEARISH: 'نزولی'
 };
 
 const stochRsiStatusLabelMap: Record<StochRsiAnalysis['status'], string> = {
@@ -376,6 +442,219 @@ const getAdxDirectionalBias = (
   }
 
   return labeledValue('NEUTRAL', describeLabel('جهت روند ADX', 'خنثی'));
+};
+
+const buildTimeframeComposite = (
+  score: number,
+  action: TimeframeAction,
+  explanationKey: string
+): TimeframeComposite => {
+  const normalizedScore = clampScore(score);
+
+  return {
+    score: normalizedScore,
+    action,
+    quality: classifyTimeframeQuality(normalizedScore),
+    explanationKey
+  };
+};
+
+const calculateTimeframeComposites = ({
+  regime,
+  buy,
+  sell,
+  stochRsi,
+  priceTrend,
+  adx,
+  atr,
+  liquidityConfirmation
+}: {
+  regime: AnalysisRegime;
+  buy: BuyTimeframes;
+  sell: SellTimeframes;
+  stochRsi: StochRsiAnalysis;
+  priceTrend: PriceTrendAnalysis;
+  adx: AdxAnalysis;
+  atr: AtrAnalysis;
+  liquidityConfirmation?: LiquidityConfirmation;
+}): CompositeTimeframes => {
+  const bullishRegime =
+    regime === 'STRONG_BULLISH_LIQUIDITY' ||
+    regime === 'EARLY_BULLISH' ||
+    regime === 'CONFIRMED_BULLISH';
+  const adxBullish = adx.bullishDirectionalBias;
+  const highAtr = atr.volatilityRegime === 'HIGH';
+
+  const shortTermScore = clampScore(
+    (stochRsi.probableBuy ? 30 : 0) +
+      (buy.shortTerm ? 25 : 0) +
+      (priceTrend.bullish || priceTrend.direction === 'IMPROVING' ? 20 : 0) +
+      (adxBullish ? 10 : 0) +
+      (bullishRegime ? 10 : 0) -
+      (stochRsi.confirmedSell
+        ? 50
+        : stochRsi.riskSell
+          ? 35
+          : 0) -
+      (priceTrend.warning ? 20 : 0) -
+      (highAtr ? 15 : 0) -
+      (regime === 'SHORT_TERM_WARNING' ? 20 : 0) -
+      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0)
+  );
+
+  let shortTermAction: TimeframeAction = 'WAIT';
+  let shortTermExplanationKey = 'timeframe.short.wait';
+
+  if (stochRsi.confirmedSell && priceTrend.bearish) {
+    shortTermAction = 'EXIT';
+    shortTermExplanationKey = 'timeframe.short.exitConfirmedSell';
+  } else if (stochRsi.confirmedSell) {
+    shortTermAction = 'REDUCE';
+    shortTermExplanationKey = 'timeframe.short.reduceConfirmedSell';
+  } else if (stochRsi.riskSell || priceTrend.warning || highAtr) {
+    shortTermAction = 'CAUTION';
+    shortTermExplanationKey = 'timeframe.short.caution';
+  } else if (
+    shortTermScore >= 70 &&
+    stochRsi.probableBuy &&
+    buy.shortTerm &&
+    priceTrend.bullish
+  ) {
+    shortTermAction = 'BUY';
+    shortTermExplanationKey = 'timeframe.short.buyReady';
+  } else if (shortTermScore >= 35 && stochRsi.probableBuy) {
+    shortTermAction = 'PROBABLE_BUY';
+    shortTermExplanationKey = 'timeframe.short.probableBuy';
+  } else if (shortTermScore >= 20) {
+    shortTermAction = 'HOLD';
+    shortTermExplanationKey = 'timeframe.short.hold';
+  }
+
+  const midTermScore = clampScore(
+    (buy.midTerm ? 30 : 0) +
+      (priceTrend.bullish ? 25 : 0) +
+      (bullishRegime ? 20 : 0) +
+      (adxBullish ? 15 : 0) +
+      (buy.longTerm ? 10 : 0) +
+      (stochRsi.probableBuy ? 10 : 0) +
+      (liquidityConfirmation?.liquidityExpansion ? 5 : 0) -
+      (stochRsi.confirmedSell
+        ? 40
+        : stochRsi.riskSell
+          ? 25
+          : 0) -
+      (priceTrend.bearish ? 25 : 0) -
+      (regime === 'SHORT_TERM_WARNING' ? 20 : 0) -
+      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
+      (highAtr ? 10 : 0)
+  );
+
+  let midTermAction: TimeframeAction = 'WAIT';
+  let midTermExplanationKey = 'timeframe.mid.wait';
+
+  if (regime === 'BEARISH_LIQUIDITY' && priceTrend.bearish) {
+    midTermAction = 'EXIT';
+    midTermExplanationKey = 'timeframe.mid.exitBearish';
+  } else if (stochRsi.confirmedSell && !buy.midTerm) {
+    midTermAction = 'REDUCE';
+    midTermExplanationKey = 'timeframe.mid.reduceConfirmedSell';
+  } else if (
+    stochRsi.riskSell ||
+    priceTrend.warning ||
+    regime === 'SHORT_TERM_WARNING'
+  ) {
+    midTermAction = 'CAUTION';
+    midTermExplanationKey = 'timeframe.mid.caution';
+  } else if (
+    midTermScore >= 70 &&
+    buy.midTerm &&
+    priceTrend.bullish &&
+    bullishRegime &&
+    stochRsi.probableBuy
+  ) {
+    midTermAction = 'BUY';
+    midTermExplanationKey = 'timeframe.mid.buyReady';
+  } else if (
+    midTermScore >= 35 &&
+    (buy.midTerm || priceTrend.bullish) &&
+    stochRsi.probableBuy
+  ) {
+    midTermAction = 'PROBABLE_BUY';
+    midTermExplanationKey = 'timeframe.mid.probableBuy';
+  } else if (midTermScore >= 20) {
+    midTermAction = 'HOLD';
+    midTermExplanationKey = 'timeframe.mid.hold';
+  }
+
+  const longTermScore = clampScore(
+    (buy.longTerm ? 30 : 0) +
+      (priceTrend.closeAboveLongMa ? 25 : 0) +
+      (priceTrend.midAboveLongMa ? 20 : 0) +
+      (bullishRegime ? 20 : 0) +
+      (adxBullish ? 10 : 0) +
+      (stochRsi.probableBuy ? 5 : 0) +
+      (buy.midTerm ? 5 : 0) -
+      (stochRsi.confirmedSell
+        ? 25
+        : stochRsi.riskSell
+          ? 15
+          : 0) -
+      (priceTrend.bearish ? 35 : 0) -
+      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
+      (highAtr ? 10 : 0)
+  );
+
+  let longTermAction: TimeframeAction = 'WAIT';
+  let longTermExplanationKey = 'timeframe.long.wait';
+
+  if (regime === 'BEARISH_LIQUIDITY' && priceTrend.bearish && sell.longTerm) {
+    longTermAction = 'EXIT';
+    longTermExplanationKey = 'timeframe.long.exitBearish';
+  } else if (priceTrend.bearish || sell.longTerm) {
+    longTermAction = 'REDUCE';
+    longTermExplanationKey = 'timeframe.long.reduce';
+  } else if (stochRsi.confirmedSell || regime === 'SHORT_TERM_WARNING') {
+    longTermAction = 'CAUTION';
+    longTermExplanationKey = 'timeframe.long.caution';
+  } else if (
+    longTermScore >= 75 &&
+    buy.longTerm &&
+    priceTrend.bullish &&
+    bullishRegime &&
+    stochRsi.probableBuy
+  ) {
+    longTermAction = 'BUY';
+    longTermExplanationKey = 'timeframe.long.buyReady';
+  } else if (
+    longTermScore >= 45 &&
+    buy.longTerm &&
+    priceTrend.bullish &&
+    stochRsi.probableBuy
+  ) {
+    longTermAction = 'PROBABLE_BUY';
+    longTermExplanationKey = 'timeframe.long.probableBuy';
+  } else if (longTermScore >= 20) {
+    longTermAction = 'HOLD';
+    longTermExplanationKey = 'timeframe.long.hold';
+  }
+
+  return {
+    shortTerm: buildTimeframeComposite(
+      shortTermScore,
+      shortTermAction,
+      shortTermExplanationKey
+    ),
+    midTerm: buildTimeframeComposite(
+      midTermScore,
+      midTermAction,
+      midTermExplanationKey
+    ),
+    longTerm: buildTimeframeComposite(
+      longTermScore,
+      longTermAction,
+      longTermExplanationKey
+    )
+  };
 };
 
 const buildPresentationSignals = (
@@ -590,7 +869,71 @@ const buildPresentationSignals = (
       action: labeledValue(
         composite.action,
         describeLabel('اقدام نهایی تحلیل', compositeActionLabelMap[composite.action])
-      )
+      ),
+      bias: labeledValue(
+        composite.bias,
+        describeLabel('سوگیری کلی تحلیل', compositeBiasLabelMap[composite.bias])
+      ),
+      entryTiming: labeledValue(
+        composite.entryTiming,
+        describeLabel(
+          'وضعیت زمان‌بندی ورود',
+          compositeEntryTimingLabelMap[composite.entryTiming]
+        )
+      ),
+      timeframes: {
+        shortTerm: {
+          ...composite.timeframes.shortTerm,
+          action: labeledValue(
+            composite.timeframes.shortTerm.action,
+            describeLabel(
+              'اقدام کوتاه‌مدت',
+              timeframeActionLabelMap[composite.timeframes.shortTerm.action]
+            )
+          ),
+          quality: labeledValue(
+            composite.timeframes.shortTerm.quality,
+            describeLabel(
+              'کیفیت کوتاه‌مدت',
+              timeframeQualityLabelMap[composite.timeframes.shortTerm.quality]
+            )
+          )
+        },
+        midTerm: {
+          ...composite.timeframes.midTerm,
+          action: labeledValue(
+            composite.timeframes.midTerm.action,
+            describeLabel(
+              'اقدام میان‌مدت',
+              timeframeActionLabelMap[composite.timeframes.midTerm.action]
+            )
+          ),
+          quality: labeledValue(
+            composite.timeframes.midTerm.quality,
+            describeLabel(
+              'کیفیت میان‌مدت',
+              timeframeQualityLabelMap[composite.timeframes.midTerm.quality]
+            )
+          )
+        },
+        longTerm: {
+          ...composite.timeframes.longTerm,
+          action: labeledValue(
+            composite.timeframes.longTerm.action,
+            describeLabel(
+              'اقدام بلندمدت',
+              timeframeActionLabelMap[composite.timeframes.longTerm.action]
+            )
+          ),
+          quality: labeledValue(
+            composite.timeframes.longTerm.quality,
+            describeLabel(
+              'کیفیت بلندمدت',
+              timeframeQualityLabelMap[composite.timeframes.longTerm.quality]
+            )
+          )
+        }
+      }
     }
   };
 };
@@ -598,6 +941,7 @@ const buildPresentationSignals = (
 export const calculateCompositeSignal = (
   regime: AnalysisRegime,
   buy: BuyTimeframes,
+  sell: SellTimeframes,
   stochRsi: StochRsiAnalysis,
   priceTrend: PriceTrendAnalysis,
   adx?: AdxAnalysis,
@@ -717,15 +1061,47 @@ export const calculateCompositeSignal = (
       (priceTrend.direction === 'BEARISH' ? 25 : 0) -
       (priceTrend.direction === 'WEAKENING' ? 10 : 0)
   );
+  const timeframes = calculateTimeframeComposites({
+    regime,
+    buy,
+    sell,
+    stochRsi,
+    priceTrend,
+    adx:
+      adx ??
+      ({
+        status: 'INSUFFICIENT_DATA',
+        period: 14,
+        latestAdx: null,
+        latestPlusDi: null,
+        latestMinusDi: null,
+        trendStrength: 'INSUFFICIENT_DATA',
+        bullishDirectionalBias: false,
+        bearishDirectionalBias: false
+      } satisfies AdxAnalysis),
+    atr:
+      atr ??
+      ({
+        status: 'INSUFFICIENT_DATA',
+        period: 14,
+        latestAtr: null,
+        latestAtrPercent: null,
+        volatilityRegime: 'INSUFFICIENT_DATA'
+      } satisfies AtrAnalysis),
+    ...(liquidityConfirmation ? { liquidityConfirmation } : {})
+  });
 
   return {
     action,
     score,
+    bias: classifyBias(score),
+    entryTiming: classifyEntryTiming(action),
     explanationKey,
     scoreScale: {
       min: -100,
       max: 100
-    }
+    },
+    timeframes
   };
 };
 
@@ -894,6 +1270,7 @@ export const analyzeSymbolMetrics = (
   const composite = calculateCompositeSignal(
     regime,
     buy,
+    sell,
     stochRsi,
     priceTrend,
     adx,

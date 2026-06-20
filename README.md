@@ -232,6 +232,16 @@ Directions:
 
 `signals.composite.action` is the final combined system state. Liquidity is the main filter, Stoch RSI is a timing/risk trigger, and price trend confirms whether the setup is tradable.
 
+`signals.composite.score` still represents the overall directional bias score.
+
+The response now extends the global composite with:
+
+- `signals.composite.bias`: normalized overall bias bucket
+- `signals.composite.entryTiming`: global timing interpretation
+- `signals.composite.timeframes.shortTerm`: short-term entry and timing quality
+- `signals.composite.timeframes.midTerm`: swing and position-holding quality
+- `signals.composite.timeframes.longTerm`: strategic trend and holding quality
+
 Composite actions:
 
 | Action           | Meaning                                                                                                                  |
@@ -255,7 +265,7 @@ Composite actions:
 
 ## Score Scale
 
-`signals.composite.score` is clamped to `-100` through `+100`.
+`signals.composite.score` and each `signals.composite.timeframes.*.score` are clamped to `-100` through `+100`.
 
 | Score range     | Interpretation                         |
 | --------------- | -------------------------------------- |
@@ -475,14 +485,60 @@ Future improvements intentionally deferred in this MVP:
     },
     "composite": {
       "action": {
-        "label": "خرید قوی",
-        "value": "STRONG_BUY"
+        "label": "اقدام نهایی تحلیل: نگهداری",
+        "value": "HOLD"
       },
-      "score": 100,
-      "explanationKey": "composite.strongBuy",
+      "score": 60,
+      "bias": {
+        "label": "سوگیری کلی تحلیل: صعودی",
+        "value": "BULLISH"
+      },
+      "entryTiming": {
+        "label": "وضعیت زمان‌بندی ورود: فعلا آماده نیست",
+        "value": "NOT_READY"
+      },
+      "explanationKey": "composite.hold",
       "scoreScale": {
         "min": -100,
         "max": 100
+      },
+      "timeframes": {
+        "shortTerm": {
+          "score": 35,
+          "action": {
+            "label": "اقدام کوتاه‌مدت: صبر",
+            "value": "WAIT"
+          },
+          "quality": {
+            "label": "کیفیت کوتاه‌مدت: خنثی",
+            "value": "NEUTRAL"
+          },
+          "explanationKey": "timeframe.short.wait"
+        },
+        "midTerm": {
+          "score": 75,
+          "action": {
+            "label": "اقدام میان‌مدت: نگهداری",
+            "value": "HOLD"
+          },
+          "quality": {
+            "label": "کیفیت میان‌مدت: صعودی",
+            "value": "BULLISH"
+          },
+          "explanationKey": "timeframe.mid.hold"
+        },
+        "longTerm": {
+          "score": 85,
+          "action": {
+            "label": "اقدام بلندمدت: نگهداری",
+            "value": "HOLD"
+          },
+          "quality": {
+            "label": "کیفیت بلندمدت: صعودی قوی",
+            "value": "STRONG_BULLISH"
+          },
+          "explanationKey": "timeframe.long.hold"
+        }
       }
     }
   },

@@ -125,14 +125,60 @@ export type CompositeSignalAction =
   | 'RISK_SELL'
   | 'CONFIRMED_SELL';
 
+export type CompositeBias =
+  | 'STRONG_BULLISH'
+  | 'BULLISH'
+  | 'NEUTRAL'
+  | 'BEARISH'
+  | 'STRONG_BEARISH';
+
+export type CompositeEntryTiming =
+  | 'READY'
+  | 'PROBABLE'
+  | 'NOT_READY'
+  | 'RISKY'
+  | 'AVOID';
+
+export type TimeframeAction =
+  | 'BUY'
+  | 'PROBABLE_BUY'
+  | 'HOLD'
+  | 'WAIT'
+  | 'CAUTION'
+  | 'REDUCE'
+  | 'EXIT';
+
+export type TimeframeQuality =
+  | 'STRONG_BULLISH'
+  | 'BULLISH'
+  | 'NEUTRAL'
+  | 'WEAK'
+  | 'BEARISH';
+
+export type TimeframeComposite = {
+  score: number;
+  action: TimeframeAction;
+  quality: TimeframeQuality;
+  explanationKey: string;
+};
+
+export type CompositeTimeframes = {
+  shortTerm: TimeframeComposite;
+  midTerm: TimeframeComposite;
+  longTerm: TimeframeComposite;
+};
+
 export type CompositeSignal = {
   action: CompositeSignalAction;
   score: number;
+  bias: CompositeBias;
+  entryTiming: CompositeEntryTiming;
   explanationKey: string;
   scoreScale: {
     min: -100;
     max: 100;
   };
+  timeframes: CompositeTimeframes;
 };
 
 export type AtrVolatilityRegime =
@@ -311,8 +357,27 @@ export type StockAnalysisSignals = {
     status: LabeledValue<AtrAnalysis['status']>;
     volatilityRegime: LabeledValue<AtrVolatilityRegime>;
   };
-  composite: Omit<CompositeSignal, 'action'> & {
+  composite: Omit<
+    CompositeSignal,
+    'action' | 'bias' | 'entryTiming' | 'timeframes'
+  > & {
     action: LabeledValue<CompositeSignalAction>;
+    bias: LabeledValue<CompositeBias>;
+    entryTiming: LabeledValue<CompositeEntryTiming>;
+    timeframes: {
+      shortTerm: Omit<TimeframeComposite, 'action' | 'quality'> & {
+        action: LabeledValue<TimeframeAction>;
+        quality: LabeledValue<TimeframeQuality>;
+      };
+      midTerm: Omit<TimeframeComposite, 'action' | 'quality'> & {
+        action: LabeledValue<TimeframeAction>;
+        quality: LabeledValue<TimeframeQuality>;
+      };
+      longTerm: Omit<TimeframeComposite, 'action' | 'quality'> & {
+        action: LabeledValue<TimeframeAction>;
+        quality: LabeledValue<TimeframeQuality>;
+      };
+    };
   };
 };
 

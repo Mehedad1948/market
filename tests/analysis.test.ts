@@ -15,6 +15,7 @@ import type {
   AtrAnalysis,
   LiquidityConfirmation,
   PriceTrendAnalysis,
+  SellTimeframes,
   StochRsiAnalysis
 } from '../src/types';
 
@@ -81,6 +82,12 @@ const neutralLiquidityConfirmation: LiquidityConfirmation = {
   relativeTradeValue20: 1,
   liquidityExpansion: false,
   liquidityContraction: false
+};
+
+const baseSell: SellTimeframes = {
+  shortTerm: false,
+  midTerm: false,
+  longTerm: false
 };
 
 describe('analysis.service', () => {
@@ -532,6 +539,7 @@ describe('analysis.service', () => {
         midTerm: false,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         probableBuy: true,
@@ -560,6 +568,7 @@ describe('analysis.service', () => {
         midTerm: false,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         latestK: 40,
@@ -621,6 +630,7 @@ describe('analysis.service', () => {
         midTerm: false,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         riskSell: true,
@@ -643,6 +653,7 @@ describe('analysis.service', () => {
         midTerm: false,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         riskSell: true
@@ -665,6 +676,7 @@ describe('analysis.service', () => {
         midTerm: true,
         longTerm: true
       },
+      baseSell,
       {
         ...baseStochRsi,
         probableBuy: true
@@ -685,6 +697,7 @@ describe('analysis.service', () => {
         midTerm: false,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         riskSell: true,
@@ -717,6 +730,7 @@ describe('analysis.service', () => {
         midTerm: true,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         probableBuy: true
@@ -742,6 +756,7 @@ describe('analysis.service', () => {
         midTerm: true,
         longTerm: true
       },
+      baseSell,
       {
         ...baseStochRsi,
         riskSell: true,
@@ -767,6 +782,7 @@ describe('analysis.service', () => {
         midTerm: true,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         riskSell: true
@@ -788,6 +804,7 @@ describe('analysis.service', () => {
         midTerm: false,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         probableBuy: true
@@ -813,6 +830,7 @@ describe('analysis.service', () => {
         midTerm: false,
         longTerm: false
       },
+      baseSell,
       baseStochRsi,
       basePriceTrend,
       baseAdx,
@@ -831,6 +849,7 @@ describe('analysis.service', () => {
         midTerm: true,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         probableBuy: true
@@ -861,6 +880,7 @@ describe('analysis.service', () => {
         midTerm: true,
         longTerm: false
       },
+      baseSell,
       {
         ...baseStochRsi,
         probableBuy: true
@@ -881,5 +901,213 @@ describe('analysis.service', () => {
 
     expect(composite.action).toBe('CAUTION');
     expect(composite.score).toBe(75);
+  });
+
+  it('composite includes bias, entryTiming, and timeframe composites', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      baseSell,
+      baseStochRsi,
+      basePriceTrend,
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.bias).toBe('NEUTRAL');
+    expect(composite.entryTiming).toBe('NOT_READY');
+    expect(composite.timeframes.shortTerm).toBeDefined();
+    expect(composite.timeframes.midTerm).toBeDefined();
+    expect(composite.timeframes.longTerm).toBeDefined();
+  });
+
+  it('short-term score reacts strongly to Stoch RSI probableBuy', () => {
+    const withoutBuy = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      baseSell,
+      baseStochRsi,
+      basePriceTrend,
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+    const withBuy = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      baseSell,
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      basePriceTrend,
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(withBuy.timeframes.shortTerm.score).toBeGreaterThan(
+      withoutBuy.timeframes.shortTerm.score
+    );
+    expect(withBuy.timeframes.shortTerm.score).toBeGreaterThanOrEqual(20);
+    expect(['HOLD', 'PROBABLE_BUY']).toContain(withBuy.timeframes.shortTerm.action);
+  });
+
+  it('mid-term score reacts strongly to buy.midTerm and bullish price trend', () => {
+    const composite = calculateCompositeSignal(
+      'CONFIRMED_BULLISH',
+      {
+        shortTerm: false,
+        midTerm: true,
+        longTerm: false
+      },
+      baseSell,
+      baseStochRsi,
+      {
+        ...basePriceTrend,
+        direction: 'BULLISH',
+        bullish: true
+      },
+      {
+        ...baseAdx,
+        bullishDirectionalBias: true
+      },
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.midTerm.score).toBeGreaterThanOrEqual(70);
+    expect(composite.timeframes.midTerm.quality).toBe('STRONG_BULLISH');
+  });
+
+  it('long-term score reacts strongly to buy.longTerm and price above long moving average', () => {
+    const composite = calculateCompositeSignal(
+      'STRONG_BULLISH_LIQUIDITY',
+      {
+        shortTerm: false,
+        midTerm: true,
+        longTerm: true
+      },
+      baseSell,
+      baseStochRsi,
+      {
+        ...basePriceTrend,
+        direction: 'BULLISH',
+        bullish: true,
+        closeAboveLongMa: true,
+        midAboveLongMa: true
+      },
+      {
+        ...baseAdx,
+        bullishDirectionalBias: true
+      },
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.longTerm.score).toBeGreaterThanOrEqual(75);
+    expect(composite.timeframes.longTerm.quality).toBe('STRONG_BULLISH');
+  });
+
+  it('short-term confirmedSell produces REDUCE or EXIT', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      baseSell,
+      {
+        ...baseStochRsi,
+        confirmedSell: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'BEARISH',
+        bearish: true,
+        warning: true
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(['REDUCE', 'EXIT']).toContain(composite.timeframes.shortTerm.action);
+  });
+
+  it('long-term does not become BUY only because Stoch RSI probableBuy is true', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      baseSell,
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      {
+        ...basePriceTrend,
+        bullish: false,
+        direction: 'NEUTRAL',
+        closeAboveLongMa: false,
+        midAboveLongMa: false
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.longTerm.action).not.toBe('BUY');
+  });
+
+  it('separates short-term timing from stronger mid-term and long-term holding quality', () => {
+    const composite = calculateCompositeSignal(
+      'CONFIRMED_BULLISH',
+      {
+        shortTerm: false,
+        midTerm: true,
+        longTerm: true
+      },
+      baseSell,
+      baseStochRsi,
+      {
+        ...basePriceTrend,
+        direction: 'BULLISH',
+        bullish: true
+      },
+      {
+        ...baseAdx,
+        bullishDirectionalBias: true
+      },
+      baseAtr,
+      {
+        ...neutralLiquidityConfirmation,
+        liquidityExpansion: true
+      }
+    );
+
+    expect(composite.action).toBe('HOLD');
+    expect(['WAIT', 'HOLD']).toContain(composite.timeframes.shortTerm.action);
+    expect(composite.timeframes.midTerm.quality).toBe('STRONG_BULLISH');
+    expect(composite.timeframes.midTerm.action).toBe('HOLD');
+    expect(composite.timeframes.longTerm.quality).toBe('STRONG_BULLISH');
+    expect(composite.timeframes.longTerm.action).toBe('HOLD');
   });
 });
