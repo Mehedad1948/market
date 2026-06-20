@@ -186,6 +186,7 @@ curl -X POST "http://localhost:3000/api/symbols/import"
 
 ```bash
 curl "http://localhost:3000/api/symbols/grouped"
+curl "http://localhost:3000/api/symbols/grouped?grouping=official"
 ```
 
 ### Search Symbols
@@ -193,6 +194,16 @@ curl "http://localhost:3000/api/symbols/grouped"
 ```bash
 curl "http://localhost:3000/api/symbols/search?q=%D8%AE%D9%88%D8%AF%D8%B1%D9%88"
 ```
+
+### Symbol Catalog Grouping
+
+`BRS/TSETMC` provides official sector names via `sectorName` and `cs`. The app maps official sectors to broader macro groups for better UX. This mapping is curated and can be updated manually.
+
+`GET /api/symbols/grouped` supports:
+
+- `grouping=macro` by default
+- `grouping=official` for exact official sector grouping
+- `hideDuplicateBoards=true` by default
 
 ### Symbol Analysis
 

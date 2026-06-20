@@ -95,37 +95,58 @@ describe('symbol catalog routes', () => {
     });
   });
 
-  it('returns grouped symbols', async () => {
+  it('grouped route defaults to macro grouping and hideDuplicateBoards=true', async () => {
     mocks.getGroupedCatalog.mockResolvedValue({
       status: 'OK',
+      grouping: 'macro',
       updatedAt: '2026-06-20T10:30:00.000Z',
       groups: [
         {
-          key: 'stock',
-          label: 'سهام',
+          key: 'bank',
+          label: 'بانکی',
           symbolCount: 1,
-          children: []
+          symbols: []
         }
       ]
     });
 
     const response = await fetch(
-      `${baseUrl}/api/symbols/grouped?includeTypes=STOCK,ETF&search=خودرو`
+      `${baseUrl}/api/symbols/grouped?includeTypes=STOCK,ETF&search=%D8%AE%D9%88%D8%AF%D8%B1%D9%88`
     );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       status: 'OK',
-      groups: [
-        {
-          key: 'stock'
-        }
-      ]
+      grouping: 'macro',
+      groups: [{ key: 'bank' }]
     });
     expect(mocks.getGroupedCatalog).toHaveBeenCalledWith({
+      grouping: 'macro',
+      hideDuplicateBoards: true,
       includeInactive: false,
       includeTypes: ['STOCK', 'ETF'],
       search: 'خودرو',
+      format: 'array'
+    });
+  });
+
+  it('grouped route accepts official grouping override', async () => {
+    mocks.getGroupedCatalog.mockResolvedValue({
+      status: 'OK',
+      grouping: 'official',
+      updatedAt: '2026-06-20T10:30:00.000Z',
+      groups: []
+    });
+
+    const response = await fetch(
+      `${baseUrl}/api/symbols/grouped?grouping=official&hideDuplicateBoards=false`
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.getGroupedCatalog).toHaveBeenCalledWith({
+      grouping: 'official',
+      hideDuplicateBoards: false,
+      includeInactive: false,
       format: 'array'
     });
   });
@@ -142,17 +163,15 @@ describe('symbol catalog routes', () => {
       ]
     });
 
-    const response = await fetch(`${baseUrl}/api/symbols/search?q=خودرو`);
+    const response = await fetch(
+      `${baseUrl}/api/symbols/search?q=%D8%AE%D9%88%D8%AF%D8%B1%D9%88`
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       status: 'OK',
       query: 'خودرو',
-      results: [
-        {
-          code: 'خودرو'
-        }
-      ]
+      results: [{ code: 'خودرو' }]
     });
   });
 });

@@ -9,10 +9,17 @@ import type {
   CatalogSymbolItem,
   GroupedCatalogResponse,
   InstrumentType,
-  NormalizedCatalogSymbol
+  NormalizedCatalogSymbol,
+  SymbolGroupingMode
 } from '../types/symbolCatalog';
 import { classifyInstrument } from '../utils/instrumentClassifier';
 import { getDisplaySector } from '../utils/sectorDisplay';
+import {
+  getBaseSymbolCode,
+  isDuplicateBoardSymbol,
+  type MarketGroupInfo,
+  resolveMarketGroup
+} from '../utils/marketGroup';
 
 const topLevelLabels: Record<InstrumentType, string> = {
   STOCK: 'سهام',
@@ -30,7 +37,22 @@ const topLevelKeys: Record<InstrumentType, string> = {
   UNKNOWN: 'unknown'
 };
 
-const toCatalogItem = (symbol: PrismaSymbol): CatalogSymbolItem => {
+const compareCatalogItems = (a: CatalogSymbolItem, b: CatalogSymbolItem) => {
+  return (
+    a.label.localeCompare(b.label, 'fa') || a.code.localeCompare(b.code, 'fa')
+  );
+};
+
+const toCatalogItem = (
+  symbol: PrismaSymbol,
+  allCodes: Set<string>
+): CatalogSymbolItem => {
+  const marketGroup = resolveMarketGroup({
+    instrumentType: symbol.instrumentType as InstrumentType,
+    sectorName: symbol.sectorName
+  });
+  const duplicateBoard = isDuplicateBoardSymbol(symbol.symbol, allCodes);
+
   return {
     code: symbol.symbol,
     label: symbol.name ?? symbol.symbol,
@@ -38,7 +60,12 @@ const toCatalogItem = (symbol: PrismaSymbol): CatalogSymbolItem => {
     sectorId: symbol.sectorId ?? null,
     sectorName: symbol.sectorName ?? null,
     displaySector: symbol.displaySector ?? null,
-    instrumentType: symbol.instrumentType as InstrumentType
+    instrumentType: symbol.instrumentType as InstrumentType,
+    marketGroupKey: marketGroup.key,
+    marketGroupLabel: marketGroup.label,
+    marketGroupIcon: marketGroup.icon,
+    baseCode: getBaseSymbolCode(symbol.symbol),
+    isDuplicateBoard: duplicateBoard
   };
 };
 
@@ -81,7 +108,10 @@ const dedupeNormalizedSymbols = (
   return [...seen.values()].sort((a, b) => a.symbol.localeCompare(b.symbol, 'fa'));
 };
 
-const buildStockGroups = (symbols: PrismaSymbol[]): CatalogGroup | null => {
+const buildOfficialStockGroups = (
+  symbols: PrismaSymbol[],
+  allCodes: Set<string>
+): CatalogGroup | null => {
   if (symbols.length === 0) {
     return null;
   }
@@ -102,7 +132,7 @@ const buildStockGroups = (symbols: PrismaSymbol[]): CatalogGroup | null => {
       symbols: []
     };
 
-    group.symbols.push(toCatalogItem(symbol));
+    group.symbols.push(toCatalogItem(symbol, allCodes));
     group.symbolCount += 1;
     groups.set(key, group);
   }
@@ -110,9 +140,7 @@ const buildStockGroups = (symbols: PrismaSymbol[]): CatalogGroup | null => {
   const children = [...groups.values()]
     .map((group) => ({
       ...group,
-      symbols: group.symbols.sort((a, b) =>
-        a.label.localeCompare(b.label, 'fa')
-      )
+      symbols: group.symbols.sort(compareCatalogItems)
     }))
     .sort((a, b) => a.displayLabel.localeCompare(b.displayLabel, 'fa'));
 
@@ -124,9 +152,31 @@ const buildStockGroups = (symbols: PrismaSymbol[]): CatalogGroup | null => {
   };
 };
 
-const buildFlatGroup = (
+const buildFlatGroupFromMarketGroup = (
+  marketGroup: MarketGroupInfo,
+  symbols: PrismaSymbol[],
+  allCodes: Set<string>
+): CatalogGroup | null => {
+  if (symbols.length === 0) {
+    return null;
+  }
+
+  return {
+    key: marketGroup.key,
+    label: marketGroup.label,
+    icon: marketGroup.icon,
+    sortOrder: marketGroup.sortOrder,
+    symbolCount: symbols.length,
+    symbols: symbols
+      .map((symbol) => toCatalogItem(symbol, allCodes))
+      .sort(compareCatalogItems)
+  };
+};
+
+const buildOfficialFlatGroup = (
   instrumentType: Exclude<InstrumentType, 'STOCK'>,
-  symbols: PrismaSymbol[]
+  symbols: PrismaSymbol[],
+  allCodes: Set<string>
 ): CatalogGroup | null => {
   if (symbols.length === 0) {
     return null;
@@ -137,9 +187,37 @@ const buildFlatGroup = (
     label: topLevelLabels[instrumentType],
     symbolCount: symbols.length,
     symbols: symbols
-      .map(toCatalogItem)
-      .sort((a, b) => a.label.localeCompare(b.label, 'fa'))
+      .map((symbol) => toCatalogItem(symbol, allCodes))
+      .sort(compareCatalogItems)
   };
+};
+
+const buildMacroGroups = (
+  symbols: PrismaSymbol[],
+  allCodes: Set<string>
+): CatalogGroup[] => {
+  const grouped = new Map<string, { info: MarketGroupInfo; symbols: PrismaSymbol[] }>();
+
+  for (const symbol of symbols) {
+    const info = resolveMarketGroup({
+      instrumentType: symbol.instrumentType as InstrumentType,
+      sectorName: symbol.sectorName
+    });
+    const entry = grouped.get(info.key) ?? { info, symbols: [] };
+    entry.symbols.push(symbol);
+    grouped.set(info.key, entry);
+  }
+
+  return [...grouped.values()]
+    .map(({ info, symbols: groupSymbols }) =>
+      buildFlatGroupFromMarketGroup(info, groupSymbols, allCodes)
+    )
+    .filter((group): group is CatalogGroup => group !== null)
+    .sort((a, b) => {
+      const left = a.sortOrder ?? 999;
+      const right = b.sortOrder ?? 999;
+      return left - right || a.label.localeCompare(b.label, 'fa');
+    });
 };
 
 const buildObjectGroups = (groups: CatalogGroup[]) => {
@@ -203,6 +281,8 @@ export const symbolCatalogService = {
   },
 
   async getGroupedCatalog(options: {
+    grouping: SymbolGroupingMode;
+    hideDuplicateBoards: boolean;
     includeInactive: boolean;
     includeTypes?: InstrumentType[];
     search?: string;
@@ -213,34 +293,49 @@ export const symbolCatalogService = {
       ...(options.includeTypes ? { includeTypes: options.includeTypes } : {}),
       ...(options.search ? { search: options.search } : {})
     };
-    const symbols = await symbolCatalogRepository.findSymbols(filters);
+    const dbSymbols = await symbolCatalogRepository.findSymbols(filters);
+    const allCodes = new Set(dbSymbols.map((symbol) => symbol.symbol));
+    const symbols = options.hideDuplicateBoards
+      ? dbSymbols.filter(
+          (symbol) => !isDuplicateBoardSymbol(symbol.symbol, allCodes)
+        )
+      : dbSymbols;
 
-    const groups = [
-      buildStockGroups(
-        symbols.filter((symbol) => symbol.instrumentType === 'STOCK')
-      ),
-      buildFlatGroup(
-        'ETF',
-        symbols.filter((symbol) => symbol.instrumentType === 'ETF')
-      ),
-      buildFlatGroup(
-        'RIGHT',
-        symbols.filter((symbol) => symbol.instrumentType === 'RIGHT')
-      ),
-      buildFlatGroup(
-        'BOND',
-        symbols.filter((symbol) => symbol.instrumentType === 'BOND')
-      ),
-      buildFlatGroup(
-        'UNKNOWN',
-        symbols.filter((symbol) => symbol.instrumentType === 'UNKNOWN')
-      )
-    ].filter((group): group is CatalogGroup => group !== null);
+    const groups =
+      options.grouping === 'official'
+        ? [
+            buildOfficialStockGroups(
+              symbols.filter((symbol) => symbol.instrumentType === 'STOCK'),
+              allCodes
+            ),
+            buildOfficialFlatGroup(
+              'ETF',
+              symbols.filter((symbol) => symbol.instrumentType === 'ETF'),
+              allCodes
+            ),
+            buildOfficialFlatGroup(
+              'RIGHT',
+              symbols.filter((symbol) => symbol.instrumentType === 'RIGHT'),
+              allCodes
+            ),
+            buildOfficialFlatGroup(
+              'BOND',
+              symbols.filter((symbol) => symbol.instrumentType === 'BOND'),
+              allCodes
+            ),
+            buildOfficialFlatGroup(
+              'UNKNOWN',
+              symbols.filter((symbol) => symbol.instrumentType === 'UNKNOWN'),
+              allCodes
+            )
+          ].filter((group): group is CatalogGroup => group !== null)
+        : buildMacroGroups(symbols, allCodes);
 
     const updatedAt = await symbolCatalogRepository.getLatestCatalogTimestamp();
 
     return {
       status: 'OK',
+      grouping: options.grouping,
       updatedAt: updatedAt?.toISOString() ?? null,
       groups:
         options.format === 'object' ? buildObjectGroups(groups) : groups
@@ -256,7 +351,7 @@ export const symbolCatalogService = {
     return {
       status: 'OK' as const,
       query,
-      results: symbols.map(toCatalogItem)
+      results: symbols.map((symbol) => toCatalogItem(symbol, new Set(symbols.map((row) => row.symbol))))
     };
   }
 };

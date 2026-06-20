@@ -8,8 +8,26 @@ import type { InstrumentType } from '../types/symbolCatalog';
 
 const instrumentTypes = ['STOCK', 'ETF', 'RIGHT', 'BOND', 'UNKNOWN'] as const;
 
+const booleanQueryParam = (defaultValue: boolean) =>
+  z.preprocess((value) => {
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true') {
+        return true;
+      }
+
+      if (normalized === 'false') {
+        return false;
+      }
+    }
+
+    return value;
+  }, z.coerce.boolean().default(defaultValue));
+
 const groupedQuerySchema = z.object({
-  includeInactive: z.coerce.boolean().default(false),
+  grouping: z.enum(['macro', 'official']).default('macro'),
+  hideDuplicateBoards: booleanQueryParam(true),
+  includeInactive: booleanQueryParam(false),
   includeTypes: z
     .string()
     .optional()
@@ -77,6 +95,8 @@ export const getGroupedSymbols = async (
   try {
     const query = groupedQuerySchema.parse(request.query);
     const options = {
+      grouping: query.grouping,
+      hideDuplicateBoards: query.hideDuplicateBoards,
       includeInactive: query.includeInactive,
       format: query.format,
       ...(query.includeTypes ? { includeTypes: query.includeTypes } : {}),

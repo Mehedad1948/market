@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   fetchAllSymbols: vi.fn(),
@@ -28,8 +28,13 @@ vi.mock('../src/repositories/symbolCatalog.repository', () => ({
   }
 }));
 
-import { classifyInstrument } from '../src/utils/instrumentClassifier';
 import { symbolCatalogService, normalizeBrsSymbol } from '../src/services/symbolCatalog.service';
+import { classifyInstrument } from '../src/utils/instrumentClassifier';
+import {
+  getBaseSymbolCode,
+  isDuplicateBoardSymbol,
+  resolveMarketGroup
+} from '../src/utils/marketGroup';
 
 describe('symbol catalog classifier', () => {
   it('keeps Symbol.symbol and Symbol.name while adding catalog fields in Prisma schema', () => {
@@ -49,16 +54,24 @@ describe('symbol catalog classifier', () => {
   });
 
   it('detects RIGHT when symbol ends with ح', () => {
-    expect(classifyInstrument({ l18: 'خودروح', l30: 'حق تقدم خودرو' })).toBe('RIGHT');
+    expect(
+      classifyInstrument({ l18: 'خودروح', l30: 'حق تقدم خودرو' })
+    ).toBe('RIGHT');
   });
 
   it('detects ETF by صندوق', () => {
-    expect(classifyInstrument({ l18: 'دارا', l30: 'صندوق سرمایه گذاری' })).toBe('ETF');
+    expect(
+      classifyInstrument({ l18: 'دارا', l30: 'صندوق سرمایه گذاری' })
+    ).toBe('ETF');
   });
 
   it('detects BOND by اوراق or اخزا or تسهیلات', () => {
-    expect(classifyInstrument({ l18: 'اخزا123', l30: 'اوراق خزانه' })).toBe('BOND');
-    expect(classifyInstrument({ l18: 'تسه1', l30: 'تسهیلات مسکن' })).toBe('BOND');
+    expect(classifyInstrument({ l18: 'اخزا123', l30: 'اوراق خزانه' })).toBe(
+      'BOND'
+    );
+    expect(classifyInstrument({ l18: 'تسه1', l30: 'تسهیلات مسکن' })).toBe(
+      'BOND'
+    );
   });
 
   it('returns STOCK for a normal row', () => {
@@ -92,6 +105,68 @@ describe('symbol catalog classifier', () => {
       instrumentType: 'STOCK',
       isActive: true
     });
+  });
+
+  it('maps بانک‌ها و موسسات اعتباری to bank', () => {
+    expect(
+      resolveMarketGroup({
+        instrumentType: 'STOCK',
+        sectorName: 'بانک‌ها و موسسات اعتباری'
+      })
+    ).toMatchObject({ key: 'bank' });
+  });
+
+  it('maps خودرو و ساخت قطعات to auto', () => {
+    expect(
+      resolveMarketGroup({
+        instrumentType: 'STOCK',
+        sectorName: 'خودرو و ساخت قطعات'
+      })
+    ).toMatchObject({ key: 'auto' });
+  });
+
+  it('maps فلزات اساسی to metals', () => {
+    expect(
+      resolveMarketGroup({
+        instrumentType: 'STOCK',
+        sectorName: 'فلزات اساسی'
+      })
+    ).toMatchObject({ key: 'metals' });
+  });
+
+  it('maps استخراج کانه‌های فلزی to mining', () => {
+    expect(
+      resolveMarketGroup({
+        instrumentType: 'STOCK',
+        sectorName: 'استخراج کانه‌های فلزی'
+      })
+    ).toMatchObject({ key: 'mining' });
+  });
+
+  it('maps ETF instrumentType to etf', () => {
+    expect(
+      resolveMarketGroup({
+        instrumentType: 'ETF',
+        sectorName: null
+      })
+    ).toMatchObject({ key: 'etf' });
+  });
+
+  it('unknown sector goes to other', () => {
+    expect(
+      resolveMarketGroup({
+        instrumentType: 'STOCK',
+        sectorName: 'گروه نامشخص'
+      })
+    ).toMatchObject({ key: 'other' });
+  });
+
+  it('detects duplicate board symbols when base symbol exists', () => {
+    const allCodes = new Set(['وبملت', 'وبملت2', 'وبملت3']);
+
+    expect(getBaseSymbolCode('وبملت2')).toBe('وبملت');
+    expect(isDuplicateBoardSymbol('وبملت2', allCodes)).toBe(true);
+    expect(isDuplicateBoardSymbol('وبملت', allCodes)).toBe(false);
   });
 });
 
@@ -131,7 +206,7 @@ describe('symbol catalog service', () => {
     expect(result.summary.etfs).toBe(1);
   });
 
-  it('marks missing old rows inactive', async () => {
+  it('imports marks missing old rows inactive', async () => {
     mocks.fetchAllSymbols.mockResolvedValue([
       {
         l18: 'خودرو',
@@ -148,20 +223,43 @@ describe('symbol catalog service', () => {
     expect(mocks.deactivateMissingSymbols).toHaveBeenCalledWith(['خودرو']);
   });
 
-  it('returns STOCK grouped by sector', async () => {
+  it('grouping defaults to macro', async () => {
+    mocks.findSymbols.mockResolvedValue([
+      {
+        symbol: 'وبملت',
+        name: 'بانک ملت',
+        isin: null,
+        sectorId: '57',
+        sectorName: 'بانک‌ها و موسسات اعتباری',
+        displaySector: 'بانک‌ها و موسسات اعتباری',
+        instrumentType: 'STOCK'
+      }
+    ]);
+
+    const result = await symbolCatalogService.getGroupedCatalog({
+      grouping: 'macro',
+      hideDuplicateBoards: true,
+      includeInactive: false,
+      format: 'array'
+    });
+
+    expect(result.grouping).toBe('macro');
+    expect(result.groups).toMatchObject([
+      {
+        key: 'bank',
+        label: 'بانکی',
+        icon: 'bank',
+        sortOrder: 10,
+        symbolCount: 1
+      }
+    ]);
+  });
+
+  it('grouping=official keeps old official sector behavior', async () => {
     mocks.findSymbols.mockResolvedValue([
       {
         symbol: 'خودرو',
         name: 'ایران خودرو',
-        isin: 'IRO1IKCO0001',
-        sectorId: '34',
-        sectorName: 'خودرو و ساخت قطعات',
-        displaySector: 'خودرویی‌ها',
-        instrumentType: 'STOCK'
-      },
-      {
-        symbol: 'خساپا',
-        name: 'سایپا',
         isin: null,
         sectorId: '34',
         sectorName: 'خودرو و ساخت قطعات',
@@ -171,30 +269,65 @@ describe('symbol catalog service', () => {
     ]);
 
     const result = await symbolCatalogService.getGroupedCatalog({
+      grouping: 'official',
+      hideDuplicateBoards: true,
       includeInactive: false,
       format: 'array'
     });
 
-    expect(Array.isArray(result.groups)).toBe(true);
+    expect(result.grouping).toBe('official');
     expect(result.groups).toMatchObject([
       {
         key: 'stock',
-        label: 'سهام',
-        symbolCount: 2,
         children: [
           {
             key: 'sector:34',
             sectorId: '34',
-            label: 'خودرو و ساخت قطعات',
-            displayLabel: 'خودرویی‌ها',
-            symbolCount: 2
+            label: 'خودرو و ساخت قطعات'
           }
         ]
       }
     ]);
   });
 
-  it('returns ETF as a top-level group', async () => {
+  it('macro response includes marketGroupKey, marketGroupLabel, marketGroupIcon', async () => {
+    mocks.findSymbols.mockResolvedValue([
+      {
+        symbol: 'وبملت',
+        name: 'بانک ملت',
+        isin: null,
+        sectorId: '57',
+        sectorName: 'بانک‌ها و موسسات اعتباری',
+        displaySector: 'بانک‌ها و موسسات اعتباری',
+        instrumentType: 'STOCK'
+      }
+    ]);
+
+    const result = await symbolCatalogService.getGroupedCatalog({
+      grouping: 'macro',
+      hideDuplicateBoards: true,
+      includeInactive: false,
+      format: 'array'
+    });
+
+    expect(result.groups).toMatchObject([
+      {
+        key: 'bank',
+        symbols: [
+          {
+            code: 'وبملت',
+            marketGroupKey: 'bank',
+            marketGroupLabel: 'بانکی',
+            marketGroupIcon: 'bank',
+            baseCode: 'وبملت',
+            isDuplicateBoard: false
+          }
+        ]
+      }
+    ]);
+  });
+
+  it('returns ETF as top-level group', async () => {
     mocks.findSymbols.mockResolvedValue([
       {
         symbol: 'دارا',
@@ -208,6 +341,8 @@ describe('symbol catalog service', () => {
     ]);
 
     const result = await symbolCatalogService.getGroupedCatalog({
+      grouping: 'macro',
+      hideDuplicateBoards: true,
       includeInactive: false,
       format: 'array'
     });
@@ -215,7 +350,7 @@ describe('symbol catalog service', () => {
     expect(result.groups).toMatchObject([
       {
         key: 'etf',
-        label: 'صندوق‌های قابل معامله',
+        label: 'صندوق ETF',
         symbolCount: 1
       }
     ]);
@@ -250,6 +385,8 @@ describe('symbol catalog service', () => {
     mocks.findSymbols.mockResolvedValue([]);
 
     await symbolCatalogService.getGroupedCatalog({
+      grouping: 'macro',
+      hideDuplicateBoards: true,
       includeInactive: false,
       includeTypes: ['ETF'],
       format: 'array'
@@ -257,8 +394,91 @@ describe('symbol catalog service', () => {
 
     expect(mocks.findSymbols).toHaveBeenCalledWith({
       includeInactive: false,
-      includeTypes: ['ETF'],
-      search: undefined
+      includeTypes: ['ETF']
     });
+  });
+
+  it('hideDuplicateBoards hides symbols ending in 2 or 3 if base symbol exists', async () => {
+    mocks.findSymbols.mockResolvedValue([
+      {
+        symbol: 'وبملت',
+        name: 'بانک ملت',
+        isin: null,
+        sectorId: '57',
+        sectorName: 'بانک‌ها و موسسات اعتباری',
+        displaySector: 'بانک‌ها و موسسات اعتباری',
+        instrumentType: 'STOCK'
+      },
+      {
+        symbol: 'وبملت2',
+        name: 'بانک ملت 2',
+        isin: null,
+        sectorId: '57',
+        sectorName: 'بانک‌ها و موسسات اعتباری',
+        displaySector: 'بانک‌ها و موسسات اعتباری',
+        instrumentType: 'STOCK'
+      },
+      {
+        symbol: 'وبملت3',
+        name: 'بانک ملت 3',
+        isin: null,
+        sectorId: '57',
+        sectorName: 'بانک‌ها و موسسات اعتباری',
+        displaySector: 'بانک‌ها و موسسات اعتباری',
+        instrumentType: 'STOCK'
+      }
+    ]);
+
+    const result = await symbolCatalogService.getGroupedCatalog({
+      grouping: 'macro',
+      hideDuplicateBoards: true,
+      includeInactive: false,
+      format: 'array'
+    });
+
+    expect(result.groups).toMatchObject([
+      {
+        key: 'bank',
+        symbolCount: 1,
+        symbols: [{ code: 'وبملت' }]
+      }
+    ]);
+  });
+
+  it('hideDuplicateBoards=false keeps duplicate board symbols', async () => {
+    mocks.findSymbols.mockResolvedValue([
+      {
+        symbol: 'وبملت',
+        name: 'بانک ملت',
+        isin: null,
+        sectorId: '57',
+        sectorName: 'بانک‌ها و موسسات اعتباری',
+        displaySector: 'بانک‌ها و موسسات اعتباری',
+        instrumentType: 'STOCK'
+      },
+      {
+        symbol: 'وبملت2',
+        name: 'بانک ملت 2',
+        isin: null,
+        sectorId: '57',
+        sectorName: 'بانک‌ها و موسسات اعتباری',
+        displaySector: 'بانک‌ها و موسسات اعتباری',
+        instrumentType: 'STOCK'
+      }
+    ]);
+
+    const result = await symbolCatalogService.getGroupedCatalog({
+      grouping: 'macro',
+      hideDuplicateBoards: false,
+      includeInactive: false,
+      format: 'array'
+    });
+
+    expect(result.groups).toMatchObject([
+      {
+        key: 'bank',
+        symbolCount: 2
+      }
+    ]);
   });
 });

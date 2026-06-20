@@ -1,4 +1,5 @@
 export type InstrumentType = 'STOCK' | 'ETF' | 'RIGHT' | 'BOND' | 'UNKNOWN';
+export type SymbolGroupingMode = 'macro' | 'official';
 
 export type BrsAllSymbolItem = {
   l18?: string;
@@ -32,6 +33,11 @@ export type CatalogSymbolItem = {
   sectorName: string | null;
   displaySector: string | null;
   instrumentType: InstrumentType;
+  marketGroupKey?: string;
+  marketGroupLabel?: string;
+  marketGroupIcon?: string;
+  baseCode?: string;
+  isDuplicateBoard?: boolean;
 };
 
 export type CatalogChildGroup = {
@@ -47,12 +53,15 @@ export type CatalogGroup = {
   key: string;
   label: string;
   symbolCount: number;
+  icon?: string;
+  sortOrder?: number;
   children?: CatalogChildGroup[];
   symbols?: CatalogSymbolItem[];
 };
 
 export type GroupedCatalogResponse = {
   status: 'OK';
+  grouping: SymbolGroupingMode;
   updatedAt: string | null;
   groups: CatalogGroup[] | Record<string, CatalogGroup>;
 };
