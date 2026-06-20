@@ -388,11 +388,177 @@ describe('analysis.service', () => {
           label: expect.any(String),
           value: expect.any(String)
         },
+        bias: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
+        entryTiming: {
+          label: expect.any(String),
+          value: expect.any(String)
+        },
         score: expect.any(Number),
         explanationKey: expect.any(String),
         scoreScale: {
           min: -100,
           max: 100
+        },
+        timeframes: {
+          shortTerm: {
+            score: expect.any(Number),
+            action: {
+              label: expect.any(String),
+              value: expect.any(String)
+            },
+            quality: {
+              label: expect.any(String),
+              value: expect.any(String)
+            },
+            decision: {
+              buy: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              sell: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              hold: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              wait: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              caution: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              reduce: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              exit: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              }
+            },
+            positionAdvice: {
+              forNewPosition: {
+                label: expect.any(String),
+                value: expect.any(String)
+              },
+              forExistingPosition: {
+                label: expect.any(String),
+                value: expect.any(String)
+              }
+            },
+            explanationKey: expect.any(String)
+          },
+          midTerm: {
+            score: expect.any(Number),
+            action: {
+              label: expect.any(String),
+              value: expect.any(String)
+            },
+            quality: {
+              label: expect.any(String),
+              value: expect.any(String)
+            },
+            decision: {
+              buy: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              sell: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              hold: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              wait: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              caution: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              reduce: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              exit: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              }
+            },
+            positionAdvice: {
+              forNewPosition: {
+                label: expect.any(String),
+                value: expect.any(String)
+              },
+              forExistingPosition: {
+                label: expect.any(String),
+                value: expect.any(String)
+              }
+            },
+            explanationKey: expect.any(String)
+          },
+          longTerm: {
+            score: expect.any(Number),
+            action: {
+              label: expect.any(String),
+              value: expect.any(String)
+            },
+            quality: {
+              label: expect.any(String),
+              value: expect.any(String)
+            },
+            decision: {
+              buy: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              sell: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              hold: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              wait: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              caution: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              reduce: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              },
+              exit: {
+                label: expect.any(String),
+                value: expect.any(Boolean)
+              }
+            },
+            positionAdvice: {
+              forNewPosition: {
+                label: expect.any(String),
+                value: expect.any(String)
+              },
+              forExistingPosition: {
+                label: expect.any(String),
+                value: expect.any(String)
+              }
+            },
+            explanationKey: expect.any(String)
+          }
         }
       }
     });
@@ -1109,5 +1275,317 @@ describe('analysis.service', () => {
     expect(composite.timeframes.midTerm.action).toBe('HOLD');
     expect(composite.timeframes.longTerm.quality).toBe('STRONG_BULLISH');
     expect(composite.timeframes.longTerm.action).toBe('HOLD');
+  });
+
+  it('action BUY produces decision.buy true', () => {
+    const composite = calculateCompositeSignal(
+      'STRONG_BULLISH_LIQUIDITY',
+      {
+        shortTerm: true,
+        midTerm: true,
+        longTerm: false
+      },
+      baseSell,
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'BULLISH',
+        bullish: true
+      },
+      {
+        ...baseAdx,
+        bullishDirectionalBias: true
+      },
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.shortTerm.action).toBe('BUY');
+    expect(composite.timeframes.shortTerm.decision.buy).toBe(true);
+  });
+
+  it('action PROBABLE_BUY produces decision.buy true', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      baseSell,
+      {
+        ...baseStochRsi,
+        probableBuy: true
+      },
+      {
+        ...basePriceTrend,
+        direction: 'IMPROVING',
+        bullish: true
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.shortTerm.action).toBe('PROBABLE_BUY');
+    expect(composite.timeframes.shortTerm.decision.buy).toBe(true);
+  });
+
+  it('action HOLD produces decision.hold true and decision.buy false', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      baseSell,
+      baseStochRsi,
+      {
+        ...basePriceTrend,
+        bullish: true,
+        direction: 'NEUTRAL'
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.shortTerm.action).toBe('HOLD');
+    expect(composite.timeframes.shortTerm.decision.hold).toBe(true);
+    expect(composite.timeframes.shortTerm.decision.buy).toBe(false);
+  });
+
+  it('action CAUTION produces decision.caution true', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: true,
+        longTerm: true
+      },
+      baseSell,
+      {
+        ...baseStochRsi,
+        riskSell: true
+      },
+      {
+        ...basePriceTrend,
+        bullish: true,
+        direction: 'BULLISH',
+        warning: true
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.midTerm.action).toBe('CAUTION');
+    expect(composite.timeframes.midTerm.decision.caution).toBe(true);
+  });
+
+  it('action REDUCE produces decision.sell true and decision.reduce true', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: true
+      },
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: true
+      },
+      {
+        ...baseStochRsi,
+        confirmedSell: true
+      },
+      {
+        ...basePriceTrend,
+        bullish: true,
+        direction: 'NEUTRAL'
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.longTerm.action).toBe('REDUCE');
+    expect(composite.timeframes.longTerm.decision.sell).toBe(true);
+    expect(composite.timeframes.longTerm.decision.reduce).toBe(true);
+  });
+
+  it('action EXIT produces decision.sell true and decision.exit true', () => {
+    const composite = calculateCompositeSignal(
+      'BEARISH_LIQUIDITY',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: true
+      },
+      {
+        ...baseStochRsi,
+        confirmedSell: true
+      },
+      {
+        ...basePriceTrend,
+        bearish: true,
+        direction: 'BEARISH'
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.longTerm.action).toBe('EXIT');
+    expect(composite.timeframes.longTerm.decision.sell).toBe(true);
+    expect(composite.timeframes.longTerm.decision.exit).toBe(true);
+  });
+
+  it('HOLD with strong bullish quality returns entry trigger wait and existing hold advice', () => {
+    const composite = calculateCompositeSignal(
+      'CONFIRMED_BULLISH',
+      {
+        shortTerm: false,
+        midTerm: true,
+        longTerm: true
+      },
+      baseSell,
+      baseStochRsi,
+      {
+        ...basePriceTrend,
+        bullish: true,
+        direction: 'BULLISH'
+      },
+      {
+        ...baseAdx,
+        bullishDirectionalBias: true
+      },
+      baseAtr,
+      {
+        ...neutralLiquidityConfirmation,
+        liquidityExpansion: true
+      }
+    );
+
+    expect(composite.timeframes.midTerm.action).toBe('HOLD');
+    expect(composite.timeframes.midTerm.quality).toBe('STRONG_BULLISH');
+    expect(composite.timeframes.midTerm.positionAdvice.forNewPosition).toBe(
+      'WAIT_FOR_ENTRY_TRIGGER'
+    );
+    expect(composite.timeframes.midTerm.positionAdvice.forExistingPosition).toBe(
+      'HOLD'
+    );
+  });
+
+  it('CAUTION returns avoid for new position and hold with caution for existing position', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: true,
+        longTerm: true
+      },
+      baseSell,
+      {
+        ...baseStochRsi,
+        riskSell: true
+      },
+      {
+        ...basePriceTrend,
+        bullish: true,
+        direction: 'BULLISH',
+        warning: true
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.midTerm.positionAdvice.forNewPosition).toBe(
+      'AVOID'
+    );
+    expect(
+      composite.timeframes.midTerm.positionAdvice.forExistingPosition
+    ).toBe('HOLD_WITH_CAUTION');
+  });
+
+  it('REDUCE returns avoid for new position and reduce for existing position', () => {
+    const composite = calculateCompositeSignal(
+      'NEUTRAL',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: true
+      },
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: true
+      },
+      {
+        ...baseStochRsi,
+        confirmedSell: true
+      },
+      {
+        ...basePriceTrend,
+        bullish: true,
+        direction: 'NEUTRAL'
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.longTerm.positionAdvice.forNewPosition).toBe(
+      'AVOID'
+    );
+    expect(
+      composite.timeframes.longTerm.positionAdvice.forExistingPosition
+    ).toBe('REDUCE');
+  });
+
+  it('EXIT returns avoid for new position and exit for existing position', () => {
+    const composite = calculateCompositeSignal(
+      'BEARISH_LIQUIDITY',
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: false
+      },
+      {
+        shortTerm: false,
+        midTerm: false,
+        longTerm: true
+      },
+      {
+        ...baseStochRsi,
+        confirmedSell: true
+      },
+      {
+        ...basePriceTrend,
+        bearish: true,
+        direction: 'BEARISH'
+      },
+      baseAdx,
+      baseAtr,
+      neutralLiquidityConfirmation
+    );
+
+    expect(composite.timeframes.longTerm.positionAdvice.forNewPosition).toBe(
+      'AVOID'
+    );
+    expect(
+      composite.timeframes.longTerm.positionAdvice.forExistingPosition
+    ).toBe('EXIT');
   });
 });

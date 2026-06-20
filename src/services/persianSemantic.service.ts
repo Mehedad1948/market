@@ -124,72 +124,104 @@ const generateHorizonSummary = (
   horizon: 'کوتاه‌مدت' | 'میان‌مدت' | 'بلندمدت',
   timeframe: TimeframeComposite
 ): string => {
+  const positionAdviceMessage = (() => {
+    switch (timeframe.positionAdvice.forNewPosition) {
+      case 'BUY':
+        return 'برای ورود جدید، امکان ورود مستقیم وجود دارد.';
+      case 'PROBABLE_BUY':
+        return 'برای ورود جدید، امکان ورود احتمالی با تایید بیشتر قابل بررسی است.';
+      case 'WAIT_FOR_ENTRY_TRIGGER':
+        return 'برای ورود جدید، با وجود کیفیت مناسب، هنوز تریگر ورود فعال نیست و بهتر است صبر شود.';
+      case 'AVOID':
+        return 'برای ورود جدید، فعلا عدم ورود مناسب‌تر ارزیابی می‌شود.';
+      default:
+        return 'برای ورود جدید، بهتر است صبر شود.';
+    }
+  })();
+
+  const existingPositionAdviceMessage = (() => {
+    switch (timeframe.positionAdvice.forExistingPosition) {
+      case 'HOLD':
+        return 'برای دارنده سهم، وضعیت فعلی بیشتر مناسب نگهداری است.';
+      case 'HOLD_WITH_CAUTION':
+        return 'برای دارنده سهم، نگهداری با احتیاط و پایش ریسک پیشنهاد می‌شود.';
+      case 'REDUCE':
+        return 'برای دارنده سهم، کاهش ریسک یا کاهش بخشی از موقعیت قابل بررسی است.';
+      case 'EXIT':
+        return 'برای دارنده سهم، سیگنال خروج فعال شده است.';
+      default:
+        return 'برای دارنده سهم، نظارت و پایش مستمر پیشنهاد می‌شود.';
+    }
+  })();
+
   if (horizon === 'کوتاه‌مدت') {
     if (timeframe.action === 'BUY') {
-      return 'جمع‌بندی کوتاه‌مدت: شرایط ورود کوتاه‌مدت آماده و مومنتوم خرید فعال است.';
+      return `جمع‌بندی کوتاه‌مدت: شرایط ورود کوتاه‌مدت آماده و مومنتوم خرید فعال است. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
     if (timeframe.action === 'PROBABLE_BUY') {
-      return 'جمع‌بندی کوتاه‌مدت: نشانه‌های ورود کوتاه‌مدت دیده می‌شود، اما هنوز بهتر است با تایید بیشتر اقدام شود.';
+      return `جمع‌بندی کوتاه‌مدت: نشانه‌های ورود کوتاه‌مدت دیده می‌شود، اما هنوز بهتر است با تایید بیشتر اقدام شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
     if (timeframe.action === 'CAUTION') {
-      return 'جمع‌بندی کوتاه‌مدت: ریسک نوسان یا هشدار کوتاه‌مدت دیده می‌شود و باید با احتیاط عمل کرد.';
+      return `جمع‌بندی کوتاه‌مدت: ریسک نوسان یا هشدار کوتاه‌مدت دیده می‌شود و باید با احتیاط عمل کرد. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
     if (timeframe.action === 'REDUCE' || timeframe.action === 'EXIT') {
-      return 'جمع‌بندی کوتاه‌مدت: فشار خروج کوتاه‌مدت فعال شده و کاهش موقعیت یا خروج قابل بررسی است.';
+      return `جمع‌بندی کوتاه‌مدت: فشار خروج کوتاه‌مدت فعال شده و کاهش موقعیت یا خروج قابل بررسی است. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
     if (timeframe.action === 'HOLD') {
-      return 'جمع‌بندی کوتاه‌مدت: وضعیت کوتاه‌مدت بد نیست، اما هنوز سیگنال ورود تازه و قوی دیده نمی‌شود.';
+      return `جمع‌بندی کوتاه‌مدت: وضعیت کوتاه‌مدت بد نیست، اما هنوز سیگنال ورود تازه و قوی دیده نمی‌شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
-    return 'جمع‌بندی کوتاه‌مدت: سیگنال ورود تازه فعال نیست و بهتر است برای اصلاح یا کراس مناسب‌تر صبر شود.';
+    return `جمع‌بندی کوتاه‌مدت: سیگنال ورود تازه فعال نیست و بهتر است برای اصلاح یا کراس مناسب‌تر صبر شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
   }
 
   if (horizon === 'میان‌مدت') {
     if (timeframe.action === 'BUY') {
-      return 'جمع‌بندی میان‌مدت: روند و نقدینگی برای ورود میان‌مدت مناسب ارزیابی می‌شود.';
+      return `جمع‌بندی میان‌مدت: روند و نقدینگی برای ورود میان‌مدت مناسب ارزیابی می‌شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
     if (timeframe.action === 'PROBABLE_BUY' || timeframe.action === 'HOLD') {
-      return timeframe.quality === 'STRONG_BULLISH' ||
+      return (timeframe.quality === 'STRONG_BULLISH' ||
         timeframe.quality === 'BULLISH'
         ? 'جمع‌بندی میان‌مدت: وضعیت روند و نقدینگی مثبت است و نگهداری سهم قابل قبول ارزیابی می‌شود.'
-        : 'جمع‌بندی میان‌مدت: وضعیت میان‌مدت قابل قبول است، اما هنوز کیفیت روند برای ورود پرقدرت کامل نیست.';
+        : 'جمع‌بندی میان‌مدت: وضعیت میان‌مدت قابل قبول است، اما هنوز کیفیت روند برای ورود پرقدرت کامل نیست.') +
+        ` ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
     if (timeframe.action === 'CAUTION') {
-      return 'جمع‌بندی میان‌مدت: برخی هشدارهای روند یا مومنتوم دیده می‌شود و بهتر است محتاطانه پیگیری شود.';
+      return `جمع‌بندی میان‌مدت: برخی هشدارهای روند یا مومنتوم دیده می‌شود و بهتر است محتاطانه پیگیری شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
     if (timeframe.action === 'REDUCE' || timeframe.action === 'EXIT') {
-      return 'جمع‌بندی میان‌مدت: کیفیت نگهداری میان‌مدت تضعیف شده و کاهش موقعیت یا خروج باید بررسی شود.';
+      return `جمع‌بندی میان‌مدت: کیفیت نگهداری میان‌مدت تضعیف شده و کاهش موقعیت یا خروج باید بررسی شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
     }
 
-    return 'جمع‌بندی میان‌مدت: هنوز شواهد کافی برای ورود یا نگهداری قوی میان‌مدت دیده نمی‌شود.';
+    return `جمع‌بندی میان‌مدت: هنوز شواهد کافی برای ورود یا نگهداری قوی میان‌مدت دیده نمی‌شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
   }
 
   if (timeframe.action === 'BUY') {
-    return 'جمع‌بندی بلندمدت: ساختار کلی سهم صعودی و مناسب نگهداری یا اضافه‌کردن موقعیت ارزیابی می‌شود.';
+    return `جمع‌بندی بلندمدت: ساختار کلی سهم صعودی و مناسب نگهداری یا اضافه‌کردن موقعیت ارزیابی می‌شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
   }
 
   if (timeframe.action === 'PROBABLE_BUY' || timeframe.action === 'HOLD') {
-    return timeframe.quality === 'STRONG_BULLISH'
+    return (timeframe.quality === 'STRONG_BULLISH'
       ? 'جمع‌بندی بلندمدت: ساختار کلی سهم همچنان صعودی و قدرتمند است.'
-      : 'جمع‌بندی بلندمدت: ساختار بلندمدت سهم هنوز مثبت است و نگهداری آن قابل دفاع ارزیابی می‌شود.';
+      : 'جمع‌بندی بلندمدت: ساختار بلندمدت سهم هنوز مثبت است و نگهداری آن قابل دفاع ارزیابی می‌شود.') +
+      ` ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
   }
 
   if (timeframe.action === 'CAUTION') {
-    return 'جمع‌بندی بلندمدت: روند اصلی هنوز کاملا تخریب نشده، اما نشانه‌هایی از احتیاط در افق بلندمدت دیده می‌شود.';
+    return `جمع‌بندی بلندمدت: روند اصلی هنوز کاملا تخریب نشده، اما نشانه‌هایی از احتیاط در افق بلندمدت دیده می‌شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
   }
 
   if (timeframe.action === 'REDUCE' || timeframe.action === 'EXIT') {
-    return 'جمع‌بندی بلندمدت: ساختار روند بلندمدت تضعیف شده و نگهداری پرریسک‌تر شده است.';
+    return `جمع‌بندی بلندمدت: ساختار روند بلندمدت تضعیف شده و نگهداری پرریسک‌تر شده است. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
   }
 
-  return 'جمع‌بندی بلندمدت: هنوز کیفیت کافی برای تصمیم‌گیری مثبت بلندمدت دیده نمی‌شود.';
+  return `جمع‌بندی بلندمدت: هنوز کیفیت کافی برای تصمیم‌گیری مثبت بلندمدت دیده نمی‌شود. ${positionAdviceMessage} ${existingPositionAdviceMessage}`;
 };
 
 const generateCompositeHorizonSummaries = (

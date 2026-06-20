@@ -65,18 +65,57 @@ const probableBuyComposite: CompositeSignal = {
       score: 40,
       action: 'PROBABLE_BUY',
       quality: 'BULLISH',
+      decision: {
+        buy: true,
+        sell: false,
+        hold: false,
+        wait: false,
+        caution: false,
+        reduce: false,
+        exit: false
+      },
+      positionAdvice: {
+        forNewPosition: 'PROBABLE_BUY',
+        forExistingPosition: 'HOLD'
+      },
       explanationKey: 'timeframe.short.probableBuy'
     },
     midTerm: {
       score: 55,
       action: 'HOLD',
       quality: 'BULLISH',
+      decision: {
+        buy: false,
+        sell: false,
+        hold: true,
+        wait: false,
+        caution: false,
+        reduce: false,
+        exit: false
+      },
+      positionAdvice: {
+        forNewPosition: 'WAIT_FOR_ENTRY_TRIGGER',
+        forExistingPosition: 'HOLD'
+      },
       explanationKey: 'timeframe.mid.hold'
     },
     longTerm: {
       score: 75,
       action: 'HOLD',
       quality: 'STRONG_BULLISH',
+      decision: {
+        buy: false,
+        sell: false,
+        hold: true,
+        wait: false,
+        caution: false,
+        reduce: false,
+        exit: false
+      },
+      positionAdvice: {
+        forNewPosition: 'WAIT_FOR_ENTRY_TRIGGER',
+        forExistingPosition: 'HOLD'
+      },
       explanationKey: 'timeframe.long.hold'
     }
   }
@@ -154,18 +193,57 @@ describe('persianSemantic.service', () => {
             score: -40,
             action: 'REDUCE',
             quality: 'BEARISH',
+            decision: {
+              buy: false,
+              sell: true,
+              hold: false,
+              wait: false,
+              caution: false,
+              reduce: true,
+              exit: false
+            },
+            positionAdvice: {
+              forNewPosition: 'AVOID',
+              forExistingPosition: 'REDUCE'
+            },
             explanationKey: 'timeframe.short.reduceConfirmedSell'
           },
           midTerm: {
             score: 35,
             action: 'CAUTION',
             quality: 'BULLISH',
+            decision: {
+              buy: false,
+              sell: false,
+              hold: false,
+              wait: false,
+              caution: true,
+              reduce: false,
+              exit: false
+            },
+            positionAdvice: {
+              forNewPosition: 'AVOID',
+              forExistingPosition: 'HOLD_WITH_CAUTION'
+            },
             explanationKey: 'timeframe.mid.caution'
           },
           longTerm: {
             score: 55,
             action: 'HOLD',
             quality: 'BULLISH',
+            decision: {
+              buy: false,
+              sell: false,
+              hold: true,
+              wait: false,
+              caution: false,
+              reduce: false,
+              exit: false
+            },
+            positionAdvice: {
+              forNewPosition: 'WAIT_FOR_ENTRY_TRIGGER',
+              forExistingPosition: 'HOLD'
+            },
             explanationKey: 'timeframe.long.hold'
           }
         }

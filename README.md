@@ -242,6 +242,14 @@ The response now extends the global composite with:
 - `signals.composite.timeframes.midTerm`: swing and position-holding quality
 - `signals.composite.timeframes.longTerm`: strategic trend and holding quality
 
+Within each timeframe:
+
+- `score`: numeric strength on the `-100` to `+100` scale
+- `quality`: the structural health of that timeframe
+- `action`: the current operational state
+- `decision`: explicit boolean flags for UI and rules engines
+- `positionAdvice`: separate advice for new entries versus already-held positions
+
 Composite actions:
 
 | Action           | Meaning                                                                                                                  |
@@ -513,6 +521,46 @@ Future improvements intentionally deferred in this MVP:
             "label": "کیفیت کوتاه‌مدت: خنثی",
             "value": "NEUTRAL"
           },
+          "decision": {
+            "buy": {
+              "label": "تصمیم خرید کوتاه‌مدت: غیرفعال",
+              "value": false
+            },
+            "sell": {
+              "label": "تصمیم فروش کوتاه‌مدت: غیرفعال",
+              "value": false
+            },
+            "hold": {
+              "label": "تصمیم نگهداری کوتاه‌مدت: غیرفعال",
+              "value": false
+            },
+            "wait": {
+              "label": "تصمیم صبر کوتاه‌مدت: فعال",
+              "value": true
+            },
+            "caution": {
+              "label": "تصمیم احتیاط کوتاه‌مدت: غیرفعال",
+              "value": false
+            },
+            "reduce": {
+              "label": "تصمیم کاهش موقعیت کوتاه‌مدت: غیرفعال",
+              "value": false
+            },
+            "exit": {
+              "label": "تصمیم خروج کوتاه‌مدت: غیرفعال",
+              "value": false
+            }
+          },
+          "positionAdvice": {
+            "forNewPosition": {
+              "label": "برای ورود جدید: صبر",
+              "value": "WAIT"
+            },
+            "forExistingPosition": {
+              "label": "برای دارنده سهم: نظارت",
+              "value": "MONITOR"
+            }
+          },
           "explanationKey": "timeframe.short.wait"
         },
         "midTerm": {
@@ -525,6 +573,46 @@ Future improvements intentionally deferred in this MVP:
             "label": "کیفیت میان‌مدت: صعودی",
             "value": "BULLISH"
           },
+          "decision": {
+            "buy": {
+              "label": "تصمیم خرید میان‌مدت: غیرفعال",
+              "value": false
+            },
+            "sell": {
+              "label": "تصمیم فروش میان‌مدت: غیرفعال",
+              "value": false
+            },
+            "hold": {
+              "label": "تصمیم نگهداری میان‌مدت: فعال",
+              "value": true
+            },
+            "wait": {
+              "label": "تصمیم صبر میان‌مدت: غیرفعال",
+              "value": false
+            },
+            "caution": {
+              "label": "تصمیم احتیاط میان‌مدت: غیرفعال",
+              "value": false
+            },
+            "reduce": {
+              "label": "تصمیم کاهش موقعیت میان‌مدت: غیرفعال",
+              "value": false
+            },
+            "exit": {
+              "label": "تصمیم خروج میان‌مدت: غیرفعال",
+              "value": false
+            }
+          },
+          "positionAdvice": {
+            "forNewPosition": {
+              "label": "برای ورود جدید: صبر تا فعال شدن تریگر ورود",
+              "value": "WAIT_FOR_ENTRY_TRIGGER"
+            },
+            "forExistingPosition": {
+              "label": "برای دارنده سهم: نگهداری",
+              "value": "HOLD"
+            }
+          },
           "explanationKey": "timeframe.mid.hold"
         },
         "longTerm": {
@@ -536,6 +624,46 @@ Future improvements intentionally deferred in this MVP:
           "quality": {
             "label": "کیفیت بلندمدت: صعودی قوی",
             "value": "STRONG_BULLISH"
+          },
+          "decision": {
+            "buy": {
+              "label": "تصمیم خرید بلندمدت: غیرفعال",
+              "value": false
+            },
+            "sell": {
+              "label": "تصمیم فروش بلندمدت: غیرفعال",
+              "value": false
+            },
+            "hold": {
+              "label": "تصمیم نگهداری بلندمدت: فعال",
+              "value": true
+            },
+            "wait": {
+              "label": "تصمیم صبر بلندمدت: غیرفعال",
+              "value": false
+            },
+            "caution": {
+              "label": "تصمیم احتیاط بلندمدت: غیرفعال",
+              "value": false
+            },
+            "reduce": {
+              "label": "تصمیم کاهش موقعیت بلندمدت: غیرفعال",
+              "value": false
+            },
+            "exit": {
+              "label": "تصمیم خروج بلندمدت: غیرفعال",
+              "value": false
+            }
+          },
+          "positionAdvice": {
+            "forNewPosition": {
+              "label": "برای ورود جدید: صبر تا فعال شدن تریگر ورود",
+              "value": "WAIT_FOR_ENTRY_TRIGGER"
+            },
+            "forExistingPosition": {
+              "label": "برای دارنده سهم: نگهداری",
+              "value": "HOLD"
+            }
           },
           "explanationKey": "timeframe.long.hold"
         }

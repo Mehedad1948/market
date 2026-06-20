@@ -155,10 +155,41 @@ export type TimeframeQuality =
   | 'WEAK'
   | 'BEARISH';
 
+export type TimeframeDecision = {
+  buy: boolean;
+  sell: boolean;
+  hold: boolean;
+  wait: boolean;
+  caution: boolean;
+  reduce: boolean;
+  exit: boolean;
+};
+
+export type NewPositionAdvice =
+  | 'BUY'
+  | 'PROBABLE_BUY'
+  | 'WAIT'
+  | 'WAIT_FOR_ENTRY_TRIGGER'
+  | 'AVOID';
+
+export type ExistingPositionAdvice =
+  | 'HOLD'
+  | 'HOLD_WITH_CAUTION'
+  | 'REDUCE'
+  | 'EXIT'
+  | 'MONITOR';
+
+export type TimeframePositionAdvice = {
+  forNewPosition: NewPositionAdvice;
+  forExistingPosition: ExistingPositionAdvice;
+};
+
 export type TimeframeComposite = {
   score: number;
   action: TimeframeAction;
   quality: TimeframeQuality;
+  decision: TimeframeDecision;
+  positionAdvice: TimeframePositionAdvice;
   explanationKey: string;
 };
 
@@ -365,17 +396,65 @@ export type StockAnalysisSignals = {
     bias: LabeledValue<CompositeBias>;
     entryTiming: LabeledValue<CompositeEntryTiming>;
     timeframes: {
-      shortTerm: Omit<TimeframeComposite, 'action' | 'quality'> & {
+      shortTerm: Omit<
+        TimeframeComposite,
+        'action' | 'quality' | 'positionAdvice' | 'decision'
+      > & {
         action: LabeledValue<TimeframeAction>;
         quality: LabeledValue<TimeframeQuality>;
+        decision: {
+          buy: LabeledValue<boolean>;
+          sell: LabeledValue<boolean>;
+          hold: LabeledValue<boolean>;
+          wait: LabeledValue<boolean>;
+          caution: LabeledValue<boolean>;
+          reduce: LabeledValue<boolean>;
+          exit: LabeledValue<boolean>;
+        };
+        positionAdvice: {
+          forNewPosition: LabeledValue<NewPositionAdvice>;
+          forExistingPosition: LabeledValue<ExistingPositionAdvice>;
+        };
       };
-      midTerm: Omit<TimeframeComposite, 'action' | 'quality'> & {
+      midTerm: Omit<
+        TimeframeComposite,
+        'action' | 'quality' | 'positionAdvice' | 'decision'
+      > & {
         action: LabeledValue<TimeframeAction>;
         quality: LabeledValue<TimeframeQuality>;
+        decision: {
+          buy: LabeledValue<boolean>;
+          sell: LabeledValue<boolean>;
+          hold: LabeledValue<boolean>;
+          wait: LabeledValue<boolean>;
+          caution: LabeledValue<boolean>;
+          reduce: LabeledValue<boolean>;
+          exit: LabeledValue<boolean>;
+        };
+        positionAdvice: {
+          forNewPosition: LabeledValue<NewPositionAdvice>;
+          forExistingPosition: LabeledValue<ExistingPositionAdvice>;
+        };
       };
-      longTerm: Omit<TimeframeComposite, 'action' | 'quality'> & {
+      longTerm: Omit<
+        TimeframeComposite,
+        'action' | 'quality' | 'positionAdvice' | 'decision'
+      > & {
         action: LabeledValue<TimeframeAction>;
         quality: LabeledValue<TimeframeQuality>;
+        decision: {
+          buy: LabeledValue<boolean>;
+          sell: LabeledValue<boolean>;
+          hold: LabeledValue<boolean>;
+          wait: LabeledValue<boolean>;
+          caution: LabeledValue<boolean>;
+          reduce: LabeledValue<boolean>;
+          exit: LabeledValue<boolean>;
+        };
+        positionAdvice: {
+          forNewPosition: LabeledValue<NewPositionAdvice>;
+          forExistingPosition: LabeledValue<ExistingPositionAdvice>;
+        };
       };
     };
   };

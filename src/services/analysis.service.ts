@@ -24,8 +24,12 @@ import type {
   StochRsiConfig,
   StockAnalysisResult,
   SymbolAnalysisParams,
+  ExistingPositionAdvice,
+  NewPositionAdvice,
   TimeframeAction,
   TimeframeComposite,
+  TimeframeDecision,
+  TimeframePositionAdvice,
   TimeframeQuality
 } from '../types';
 import { createHash } from '../utils/hash';
@@ -377,6 +381,22 @@ const timeframeQualityLabelMap: Record<TimeframeQuality, string> = {
   BEARISH: 'نزولی'
 };
 
+const newPositionAdviceLabelMap: Record<NewPositionAdvice, string> = {
+  BUY: 'برای ورود جدید: خرید',
+  PROBABLE_BUY: 'برای ورود جدید: خرید احتمالی',
+  WAIT: 'برای ورود جدید: صبر',
+  WAIT_FOR_ENTRY_TRIGGER: 'برای ورود جدید: صبر تا فعال شدن تریگر ورود',
+  AVOID: 'برای ورود جدید: عدم ورود'
+};
+
+const existingPositionAdviceLabelMap: Record<ExistingPositionAdvice, string> = {
+  HOLD: 'برای دارنده سهم: نگهداری',
+  HOLD_WITH_CAUTION: 'برای دارنده سهم: نگهداری با احتیاط',
+  REDUCE: 'برای دارنده سهم: کاهش ریسک / کاهش حجم',
+  EXIT: 'برای دارنده سهم: خروج',
+  MONITOR: 'برای دارنده سهم: نظارت'
+};
+
 const stochRsiStatusLabelMap: Record<StochRsiAnalysis['status'], string> = {
   OK: 'آماده',
   INSUFFICIENT_DATA: 'داده ناکافی'
@@ -444,17 +464,99 @@ const getAdxDirectionalBias = (
   return labeledValue('NEUTRAL', describeLabel('جهت روند ADX', 'خنثی'));
 };
 
+const buildTimeframeDecision = (
+  action: TimeframeAction
+): TimeframeDecision => {
+  return {
+    buy: action === 'BUY' || action === 'PROBABLE_BUY',
+    sell: action === 'REDUCE' || action === 'EXIT',
+    hold: action === 'HOLD',
+    wait: action === 'WAIT',
+    caution: action === 'CAUTION',
+    reduce: action === 'REDUCE',
+    exit: action === 'EXIT'
+  };
+};
+
+const buildTimeframePositionAdvice = (
+  action: TimeframeAction,
+  quality: TimeframeQuality
+): TimeframePositionAdvice => {
+  if (action === 'BUY') {
+    return {
+      forNewPosition: 'BUY',
+      forExistingPosition: 'HOLD'
+    };
+  }
+
+  if (action === 'PROBABLE_BUY') {
+    return {
+      forNewPosition: 'PROBABLE_BUY',
+      forExistingPosition: 'HOLD'
+    };
+  }
+
+  if (action === 'HOLD') {
+    return {
+      forNewPosition:
+        quality === 'STRONG_BULLISH' || quality === 'BULLISH'
+          ? 'WAIT_FOR_ENTRY_TRIGGER'
+          : 'WAIT',
+      forExistingPosition: 'HOLD'
+    };
+  }
+
+  if (action === 'WAIT') {
+    return {
+      forNewPosition: 'WAIT',
+      forExistingPosition:
+        quality === 'STRONG_BULLISH' || quality === 'BULLISH'
+          ? 'MONITOR'
+          : 'HOLD_WITH_CAUTION'
+    };
+  }
+
+  if (action === 'CAUTION') {
+    return {
+      forNewPosition: 'AVOID',
+      forExistingPosition: 'HOLD_WITH_CAUTION'
+    };
+  }
+
+  if (action === 'REDUCE') {
+    return {
+      forNewPosition: 'AVOID',
+      forExistingPosition: 'REDUCE'
+    };
+  }
+
+  if (action === 'EXIT') {
+    return {
+      forNewPosition: 'AVOID',
+      forExistingPosition: 'EXIT'
+    };
+  }
+
+  return {
+    forNewPosition: 'WAIT',
+    forExistingPosition: 'MONITOR'
+  };
+};
+
 const buildTimeframeComposite = (
   score: number,
   action: TimeframeAction,
   explanationKey: string
 ): TimeframeComposite => {
   const normalizedScore = clampScore(score);
+  const quality = classifyTimeframeQuality(normalizedScore);
 
   return {
     score: normalizedScore,
     action,
-    quality: classifyTimeframeQuality(normalizedScore),
+    quality,
+    decision: buildTimeframeDecision(action),
+    positionAdvice: buildTimeframePositionAdvice(action, quality),
     explanationKey
   };
 };
@@ -654,6 +756,75 @@ const calculateTimeframeComposites = ({
       longTermAction,
       longTermExplanationKey
     )
+  };
+};
+
+const buildPresentationTimeframeComposite = (
+  timeframe: CompositeTimeframes['shortTerm'],
+  concept: 'کوتاه‌مدت' | 'میان‌مدت' | 'بلندمدت'
+) => {
+  return {
+    ...timeframe,
+    action: labeledValue(
+      timeframe.action,
+      describeLabel(`اقدام ${concept}`, timeframeActionLabelMap[timeframe.action])
+    ),
+    quality: labeledValue(
+      timeframe.quality,
+      describeLabel(
+        `کیفیت ${concept}`,
+        timeframeQualityLabelMap[timeframe.quality]
+      )
+    ),
+    decision: {
+      buy: labeledBoolean(
+        timeframe.decision.buy,
+        describeLabel(`تصمیم خرید ${concept}`, 'فعال'),
+        describeLabel(`تصمیم خرید ${concept}`, 'غیرفعال')
+      ),
+      sell: labeledBoolean(
+        timeframe.decision.sell,
+        describeLabel(`تصمیم فروش ${concept}`, 'فعال'),
+        describeLabel(`تصمیم فروش ${concept}`, 'غیرفعال')
+      ),
+      hold: labeledBoolean(
+        timeframe.decision.hold,
+        describeLabel(`تصمیم نگهداری ${concept}`, 'فعال'),
+        describeLabel(`تصمیم نگهداری ${concept}`, 'غیرفعال')
+      ),
+      wait: labeledBoolean(
+        timeframe.decision.wait,
+        describeLabel(`تصمیم صبر ${concept}`, 'فعال'),
+        describeLabel(`تصمیم صبر ${concept}`, 'غیرفعال')
+      ),
+      caution: labeledBoolean(
+        timeframe.decision.caution,
+        describeLabel(`تصمیم احتیاط ${concept}`, 'فعال'),
+        describeLabel(`تصمیم احتیاط ${concept}`, 'غیرفعال')
+      ),
+      reduce: labeledBoolean(
+        timeframe.decision.reduce,
+        describeLabel(`تصمیم کاهش موقعیت ${concept}`, 'فعال'),
+        describeLabel(`تصمیم کاهش موقعیت ${concept}`, 'غیرفعال')
+      ),
+      exit: labeledBoolean(
+        timeframe.decision.exit,
+        describeLabel(`تصمیم خروج ${concept}`, 'فعال'),
+        describeLabel(`تصمیم خروج ${concept}`, 'غیرفعال')
+      )
+    },
+    positionAdvice: {
+      forNewPosition: labeledValue(
+        timeframe.positionAdvice.forNewPosition,
+        newPositionAdviceLabelMap[timeframe.positionAdvice.forNewPosition]
+      ),
+      forExistingPosition: labeledValue(
+        timeframe.positionAdvice.forExistingPosition,
+        existingPositionAdviceLabelMap[
+          timeframe.positionAdvice.forExistingPosition
+        ]
+      )
+    }
   };
 };
 
@@ -882,57 +1053,18 @@ const buildPresentationSignals = (
         )
       ),
       timeframes: {
-        shortTerm: {
-          ...composite.timeframes.shortTerm,
-          action: labeledValue(
-            composite.timeframes.shortTerm.action,
-            describeLabel(
-              'اقدام کوتاه‌مدت',
-              timeframeActionLabelMap[composite.timeframes.shortTerm.action]
-            )
-          ),
-          quality: labeledValue(
-            composite.timeframes.shortTerm.quality,
-            describeLabel(
-              'کیفیت کوتاه‌مدت',
-              timeframeQualityLabelMap[composite.timeframes.shortTerm.quality]
-            )
-          )
-        },
-        midTerm: {
-          ...composite.timeframes.midTerm,
-          action: labeledValue(
-            composite.timeframes.midTerm.action,
-            describeLabel(
-              'اقدام میان‌مدت',
-              timeframeActionLabelMap[composite.timeframes.midTerm.action]
-            )
-          ),
-          quality: labeledValue(
-            composite.timeframes.midTerm.quality,
-            describeLabel(
-              'کیفیت میان‌مدت',
-              timeframeQualityLabelMap[composite.timeframes.midTerm.quality]
-            )
-          )
-        },
-        longTerm: {
-          ...composite.timeframes.longTerm,
-          action: labeledValue(
-            composite.timeframes.longTerm.action,
-            describeLabel(
-              'اقدام بلندمدت',
-              timeframeActionLabelMap[composite.timeframes.longTerm.action]
-            )
-          ),
-          quality: labeledValue(
-            composite.timeframes.longTerm.quality,
-            describeLabel(
-              'کیفیت بلندمدت',
-              timeframeQualityLabelMap[composite.timeframes.longTerm.quality]
-            )
-          )
-        }
+        shortTerm: buildPresentationTimeframeComposite(
+          composite.timeframes.shortTerm,
+          'کوتاه‌مدت'
+        ),
+        midTerm: buildPresentationTimeframeComposite(
+          composite.timeframes.midTerm,
+          'میان‌مدت'
+        ),
+        longTerm: buildPresentationTimeframeComposite(
+          composite.timeframes.longTerm,
+          'بلندمدت'
+        )
       }
     }
   };

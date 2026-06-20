@@ -58,18 +58,57 @@ const composite: CompositeSignal = {
       score: 40,
       action: 'PROBABLE_BUY',
       quality: 'BULLISH',
+      decision: {
+        buy: true,
+        sell: false,
+        hold: false,
+        wait: false,
+        caution: false,
+        reduce: false,
+        exit: false
+      },
+      positionAdvice: {
+        forNewPosition: 'PROBABLE_BUY',
+        forExistingPosition: 'HOLD'
+      },
       explanationKey: 'timeframe.short.probableBuy'
     },
     midTerm: {
       score: 55,
       action: 'HOLD',
       quality: 'BULLISH',
+      decision: {
+        buy: false,
+        sell: false,
+        hold: true,
+        wait: false,
+        caution: false,
+        reduce: false,
+        exit: false
+      },
+      positionAdvice: {
+        forNewPosition: 'WAIT_FOR_ENTRY_TRIGGER',
+        forExistingPosition: 'HOLD'
+      },
       explanationKey: 'timeframe.mid.hold'
     },
     longTerm: {
       score: 75,
       action: 'HOLD',
       quality: 'STRONG_BULLISH',
+      decision: {
+        buy: false,
+        sell: false,
+        hold: true,
+        wait: false,
+        caution: false,
+        reduce: false,
+        exit: false
+      },
+      positionAdvice: {
+        forNewPosition: 'WAIT_FOR_ENTRY_TRIGGER',
+        forExistingPosition: 'HOLD'
+      },
       explanationKey: 'timeframe.long.hold'
     }
   }
