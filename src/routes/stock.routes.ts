@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import {
+  getLatestAnalyses,
   getLatestStockMetric,
   getStockAnalysis,
   getStockHistory,
@@ -11,6 +12,7 @@ import {
 export const stockRouter = Router();
 
 stockRouter.post('/scan', runManualSignalScan);
+stockRouter.get('/analyses/latest', getLatestAnalyses);
 stockRouter.get('/:symbol/analysis', getStockAnalysis);
 stockRouter.post('/:symbol/refresh', refreshStockHistory);
 stockRouter.get('/:symbol/history', getStockHistory);

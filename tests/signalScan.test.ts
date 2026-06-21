@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   getTrackedSymbols,
@@ -42,11 +42,15 @@ vi.mock('../src/services/symbolData.service', () => ({
   }
 }));
 
-import { signalScanService } from '../src/services/signalScan.service';
+import {
+  ScanAlreadyRunningError,
+  signalScanService
+} from '../src/services/signalScan.service';
 
 describe('signalScan.service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     getTrackedSymbols.mockResolvedValue(['TEST']);
     getSymbolHistory.mockResolvedValue([
       {
@@ -55,6 +59,10 @@ describe('signalScan.service', () => {
     ]);
     saveCache.mockResolvedValue({});
     refreshSymbolHistory.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('uses cache when available and forceRefresh is false', async () => {
@@ -153,5 +161,79 @@ describe('signalScan.service', () => {
       action: 'CAUTION',
       score: -5
     });
+  });
+
+  it('rejects overlapping scans', async () => {
+    let releaseHistory: (() => void) | null = null;
+
+    getActiveCache.mockResolvedValue(null);
+    getSymbolHistory.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseHistory = () => resolve([{ date: '1403-01-01' }]);
+        })
+    );
+    analyzeSymbolMetrics.mockReturnValue({
+      latestDataDate: '1403-01-01',
+      signals: {
+        composite: {
+          action: {
+            value: 'HOLD'
+          },
+          score: 5
+        }
+      }
+    });
+
+    const firstRun = signalScanService.runScan({
+      symbols: ['TEST'],
+      forceRefresh: false
+    });
+
+    await expect(
+      signalScanService.runScan({
+        symbols: ['TEST'],
+        forceRefresh: false
+      })
+    ).rejects.toBeInstanceOf(ScanAlreadyRunningError);
+
+    releaseHistory?.();
+    await firstRun;
+  });
+
+  it('waits between symbols based on configured delay', async () => {
+    vi.useFakeTimers();
+    getTrackedSymbols.mockResolvedValue(['AAA', 'BBB']);
+    getActiveCache.mockResolvedValue(null);
+    analyzeSymbolMetrics.mockReturnValue({
+      latestDataDate: '1403-01-01',
+      signals: {
+        composite: {
+          action: {
+            value: 'PROBABLE_BUY'
+          },
+          score: 21
+        }
+      }
+    });
+
+    const pending = signalScanService.runScan({
+      symbols: ['AAA', 'BBB'],
+      forceRefresh: false
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(analyzeSymbolMetrics).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(analyzeSymbolMetrics).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+
+    expect(analyzeSymbolMetrics).toHaveBeenCalledTimes(2);
   });
 });

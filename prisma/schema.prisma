@@ -119,13 +119,23 @@ model AnalysisCache {
   symbol         String
   paramsHash     String
   latestDataDate String
+  action         String?
+  score          Int?
+  bias           String?
+  entryTiming    String?
+  latestClosePrice Decimal? @db.Decimal(30, 4)
+  latestClosePriceChangePercent Decimal? @db.Decimal(30, 8)
   result         Json
+  analyzedAt     DateTime @default(now())
   expiresAt      DateTime
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@unique([symbol, paramsHash, latestDataDate])
   @@index([symbol, expiresAt])
+  @@index([paramsHash, analyzedAt])
+  @@index([paramsHash, action, score])
+  @@index([expiresAt])
 }
 
 model AnalysisRequest {

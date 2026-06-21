@@ -491,3 +491,18 @@ export type StockAnalysisResult = {
   persianSummary: string;
   disclaimer: string;
 };
+
+export type StockAnalysisCacheSummary = {
+  symbol: string;
+  latestDataDate: string;
+  analyzedAt: Date;
+  expiresAt: Date;
+  action: CompositeSignalAction | null;
+  score: number | null;
+  bias: CompositeBias | null;
+  entryTiming: CompositeEntryTiming | null;
+  latestClosePrice: number | null;
+  latestClosePriceChangePercent: number | null;
+  persianSummary: string | null;
+  result?: StockAnalysisResult;
+};

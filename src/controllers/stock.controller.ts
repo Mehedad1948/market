@@ -12,9 +12,16 @@ import {
   buildAnalysisParamsHash
 } from '../services/analysis.service';
 import { maintenanceService } from '../services/maintenance.service';
-import { signalScanService } from '../services/signalScan.service';
+import {
+  ScanAlreadyRunningError,
+  signalScanService
+} from '../services/signalScan.service';
 import { symbolDataService } from '../services/symbolData.service';
-import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
+import type {
+  StockAnalysisCacheSummary,
+  StockAnalysisResult,
+  SymbolAnalysisParams
+} from '../types';
 
 const getRouteSymbol = (value: string | string[] | undefined): string => {
   if (Array.isArray(value)) {
@@ -75,6 +82,42 @@ const historyQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0)
 });
 
+const latestAnalysesQuerySchema = z
+  .object({
+    weeklyWindow: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(env.DEFAULT_WEEKLY_WINDOW),
+    monthlyWindow: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(env.DEFAULT_MONTHLY_WINDOW),
+    quarterlyWindow: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(env.DEFAULT_QUARTERLY_WINDOW),
+    includeRealLegal: z.coerce.boolean().default(false),
+    includeResult: z.coerce.boolean().default(false),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+    offset: z.coerce.number().int().min(0).default(0)
+  })
+  .superRefine((value, ctx) => {
+    if (
+      !(
+        value.weeklyWindow < value.monthlyWindow &&
+        value.monthlyWindow < value.quarterlyWindow
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'weeklyWindow < monthlyWindow < quarterlyWindow must hold.'
+      });
+    }
+  });
+
 const manualScanBodySchema = z.object({
   symbols: z.array(z.string().trim().min(1)).optional(),
   forceRefresh: z.boolean().optional(),
@@ -97,12 +140,20 @@ class DatabaseOperationTimeoutError extends Error {
   }
 }
 
-const withDbTimeout = async <T>(operation: string, task: Promise<T>): Promise<T> => {
+const withDbTimeout = async <T>(
+  operation: string,
+  task: Promise<T>
+): Promise<T> => {
   return Promise.race([
     task,
     new Promise<T>((_, reject) => {
       setTimeout(() => {
-        reject(new DatabaseOperationTimeoutError(operation, env.DB_OPERATION_TIMEOUT_MS));
+        reject(
+          new DatabaseOperationTimeoutError(
+            operation,
+            env.DB_OPERATION_TIMEOUT_MS
+          )
+        );
       }, env.DB_OPERATION_TIMEOUT_MS);
     })
   ]);
@@ -185,6 +236,26 @@ const triggerMaintenanceCleanup = () => {
   });
 };
 
+const serializeAnalysisSummary = (
+  row: StockAnalysisCacheSummary,
+  includeResult: boolean
+) => {
+  return {
+    symbol: row.symbol,
+    latestDataDate: row.latestDataDate,
+    analyzedAt: row.analyzedAt,
+    expiresAt: row.expiresAt,
+    action: row.action,
+    score: row.score,
+    bias: row.bias,
+    entryTiming: row.entryTiming,
+    latestClosePrice: row.latestClosePrice,
+    latestClosePriceChangePercent: row.latestClosePriceChangePercent,
+    persianSummary: row.persianSummary,
+    ...(includeResult && row.result ? { result: row.result } : {})
+  };
+};
+
 const persistRequestLog = async (
   request: Request,
   symbol: string,
@@ -219,7 +290,9 @@ export const getStockAnalysis = async (
     request.query
   ) as SymbolAnalysisParams;
   const requestLog = request.log ?? logger;
-  let history = [] as Awaited<ReturnType<typeof symbolRepository.getSymbolHistory>>;
+  let history = [] as Awaited<
+    ReturnType<typeof symbolRepository.getSymbolHistory>
+  >;
   let databaseAvailable = true;
   let source: 'database' | 'brsapi' = 'database';
 
@@ -350,11 +423,11 @@ export const getStockAnalysis = async (
             cacheStatus: cachedResult.status,
             cacheSource: cachedResult.source
           },
-        '⚡ Analysis cache hit'
-      );
-      triggerMaintenanceCleanup();
-      response.json(finalResult);
-      return;
+          '⚡ Analysis cache hit'
+        );
+        triggerMaintenanceCleanup();
+        response.json(finalResult);
+        return;
       }
 
       requestLog.info(
@@ -435,6 +508,49 @@ export const getStockAnalysis = async (
 
   triggerMaintenanceCleanup();
   response.json(result);
+};
+
+export const getLatestAnalyses = async (
+  request: Request,
+  response: Response
+) => {
+  const query = latestAnalysesQuerySchema.parse(request.query);
+  const requestLog = request.log ?? logger;
+  const paramsHash = buildAnalysisParamsHash({
+    weeklyWindow: query.weeklyWindow,
+    monthlyWindow: query.monthlyWindow,
+    quarterlyWindow: query.quarterlyWindow,
+    includeRealLegal: query.includeRealLegal
+  });
+
+  requestLog.info(
+    {
+      query,
+      paramsHash
+    },
+    'Latest analyses request received'
+  );
+
+  const items = await withDbTimeout(
+    'analysisCache.getLatestAnalyses',
+    analysisCacheRepository.getLatestAnalyses(
+      paramsHash,
+      query.limit,
+      query.offset,
+      new Date(),
+      query.includeResult
+    )
+  );
+
+  triggerMaintenanceCleanup();
+  response.json({
+    status: 'OK',
+    limit: query.limit,
+    offset: query.offset,
+    items: items.map((row) =>
+      serializeAnalysisSummary(row, query.includeResult)
+    )
+  });
 };
 
 export const refreshStockHistory = async (
@@ -537,7 +653,19 @@ export const runManualSignalScan = async (
     options.includeRealLegal = body.includeRealLegal;
   }
 
-  const result = await signalScanService.runScan(options);
+  let result;
+
+  try {
+    result = await signalScanService.runScan(options);
+  } catch (error) {
+    if (error instanceof ScanAlreadyRunningError) {
+      throw new AppError('A signal scan is already running.', 409, {
+        englishMessage: 'A signal scan is already running'
+      });
+    }
+
+    throw error;
+  }
 
   response.json(result);
 };

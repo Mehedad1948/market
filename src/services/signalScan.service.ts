@@ -6,9 +6,9 @@ import { analysisCacheRepository } from '../repositories/analysisCache.repositor
 import { symbolRepository } from '../repositories/symbol.repository';
 import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
 import {
+  InsufficientDataError,
   analyzeSymbolMetrics,
-  buildAnalysisParamsHash,
-  InsufficientDataError
+  buildAnalysisParamsHash
 } from './analysis.service';
 import { symbolDataService } from './symbolData.service';
 
@@ -18,6 +18,11 @@ const parseSymbolList = (value: string): string[] => {
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
 };
+
+const sleep = (delayMs: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 
 const buildScanParams = (
   forceRefresh: boolean,
@@ -49,6 +54,13 @@ const buildWatchlist = async (symbols?: string[]): Promise<string[]> => {
   return symbolRepository.getTrackedSymbols();
 };
 
+export class ScanAlreadyRunningError extends Error {
+  constructor() {
+    super('A signal scan is already running.');
+    this.name = 'ScanAlreadyRunningError';
+  }
+}
+
 export type SignalScanItem = {
   symbol: string;
   status: 'OK' | 'INSUFFICIENT_DATA' | 'ERROR';
@@ -69,59 +81,92 @@ export type SignalScanSummary = {
   results: SignalScanItem[];
 };
 
-export const signalScanService = {
-  async runScan(options?: {
-    symbols?: string[];
-    forceRefresh?: boolean;
-    includeRealLegal?: boolean;
-  }): Promise<SignalScanSummary> {
-    const forceRefresh = options?.forceRefresh ?? env.SIGNAL_SCAN_FORCE_REFRESH;
-    const includeRealLegal =
-      options?.includeRealLegal ?? env.SIGNAL_SCAN_INCLUDE_REAL_LEGAL;
-    const symbols = await buildWatchlist(options?.symbols);
-    const params = buildScanParams(forceRefresh, includeRealLegal);
-    const paramsHash = buildAnalysisParamsHash(params);
-    const results: SignalScanItem[] = [];
+let activeScanPromise: Promise<SignalScanSummary> | null = null;
 
-    for (const symbol of symbols) {
-      try {
-        if (forceRefresh) {
-          await symbolDataService.refreshSymbolHistory(symbol, includeRealLegal);
-        }
+const runScanInternal = async (options?: {
+  symbols?: string[];
+  forceRefresh?: boolean;
+  includeRealLegal?: boolean;
+}): Promise<SignalScanSummary> => {
+  const forceRefresh = options?.forceRefresh ?? env.SIGNAL_SCAN_FORCE_REFRESH;
+  const includeRealLegal =
+    options?.includeRealLegal ?? env.SIGNAL_SCAN_INCLUDE_REAL_LEGAL;
+  const symbols = await buildWatchlist(options?.symbols);
+  const params = buildScanParams(forceRefresh, includeRealLegal);
+  const paramsHash = buildAnalysisParamsHash(params);
+  const results: SignalScanItem[] = [];
 
-        const history = await symbolRepository.getSymbolHistory(symbol);
-        const latestDataDate = history.at(-1)?.date ?? null;
+  for (const [index, symbol] of symbols.entries()) {
+    try {
+      if (forceRefresh) {
+        await symbolDataService.refreshSymbolHistory(symbol, includeRealLegal);
+      }
 
-        if (!forceRefresh && latestDataDate) {
-          const activeCache = await analysisCacheRepository.getActiveCache(
+      const history = await symbolRepository.getSymbolHistory(symbol);
+      const latestDataDate = history.at(-1)?.date ?? null;
+
+      if (!forceRefresh && latestDataDate) {
+        const activeCache = await analysisCacheRepository.getActiveCache(
+          symbol,
+          paramsHash,
+          latestDataDate
+        );
+
+        if (activeCache && activeCache.expiresAt > new Date()) {
+          const cachedResult = activeCache.result as StockAnalysisResult;
+
+          results.push({
             symbol,
-            paramsHash,
-            latestDataDate
-          );
-
-          if (activeCache && activeCache.expiresAt > new Date()) {
-            const cachedResult = activeCache.result as StockAnalysisResult;
-
-            results.push({
+            status: 'OK',
+            action: cachedResult.signals.composite.action.value,
+            score: cachedResult.signals.composite.score,
+            latestDataDate: cachedResult.latestDataDate
+          });
+          logger.info(
+            {
               symbol,
-              status: 'OK',
               action: cachedResult.signals.composite.action.value,
               score: cachedResult.signals.composite.score,
               latestDataDate: cachedResult.latestDataDate
-            });
-            logger.info(
-              {
-                symbol,
-                action: cachedResult.signals.composite.action.value,
-                score: cachedResult.signals.composite.score,
-                latestDataDate: cachedResult.latestDataDate
-              },
-              'Signal scan cache hit'
-            );
-            continue;
-          }
-        }
+            },
+            'Signal scan cache hit'
+          );
+        } else {
+          const result = analyzeSymbolMetrics(
+            symbol,
+            history,
+            params,
+            buildSource(forceRefresh),
+            false
+          );
+          const expiresAt = new Date(Date.now() + env.CACHE_TTL_SECONDS * 1000);
 
+          await analysisCacheRepository.saveCache(
+            symbol,
+            paramsHash,
+            result.latestDataDate,
+            result,
+            expiresAt
+          );
+
+          results.push({
+            symbol,
+            status: 'OK',
+            action: result.signals.composite.action.value,
+            score: result.signals.composite.score,
+            latestDataDate: result.latestDataDate
+          });
+          logger.info(
+            {
+              symbol,
+              action: result.signals.composite.action.value,
+              score: result.signals.composite.score,
+              latestDataDate: result.latestDataDate
+            },
+            'Signal scan completed for symbol'
+          );
+        }
+      } else {
         const result = analyzeSymbolMetrics(
           symbol,
           history,
@@ -155,20 +200,22 @@ export const signalScanService = {
           },
           'Signal scan completed for symbol'
         );
-      } catch (error) {
-        if (error instanceof InsufficientDataError) {
-          results.push({
-            symbol,
-            status: 'INSUFFICIENT_DATA',
-            action: null,
-            score: null,
-            latestDataDate: null,
-            reason: error.message
-          });
-          logger.warn({ symbol, err: error }, 'Signal scan skipped: insufficient data');
-          continue;
-        }
-
+      }
+    } catch (error) {
+      if (error instanceof InsufficientDataError) {
+        results.push({
+          symbol,
+          status: 'INSUFFICIENT_DATA',
+          action: null,
+          score: null,
+          latestDataDate: null,
+          reason: error.message
+        });
+        logger.warn(
+          { symbol, err: error },
+          'Signal scan skipped: insufficient data'
+        );
+      } else {
         const message =
           error instanceof Error ? error.message : 'Unknown scan error';
         results.push({
@@ -183,18 +230,41 @@ export const signalScanService = {
       }
     }
 
-    return {
-      status: 'OK',
-      scannedAt: new Date().toISOString(),
-      symbolsRequested: symbols.length,
-      scannedCount: results.length,
-      okCount: results.filter((item) => item.status === 'OK').length,
-      insufficientDataCount: results.filter(
-        (item) => item.status === 'INSUFFICIENT_DATA'
-      ).length,
-      errorCount: results.filter((item) => item.status === 'ERROR').length,
-      results
-    };
+    const hasMoreSymbols = index < symbols.length - 1;
+    if (hasMoreSymbols && env.SIGNAL_SCAN_SYMBOL_DELAY_MS > 0) {
+      await sleep(env.SIGNAL_SCAN_SYMBOL_DELAY_MS);
+    }
+  }
+
+  return {
+    status: 'OK',
+    scannedAt: new Date().toISOString(),
+    symbolsRequested: symbols.length,
+    scannedCount: results.length,
+    okCount: results.filter((item) => item.status === 'OK').length,
+    insufficientDataCount: results.filter(
+      (item) => item.status === 'INSUFFICIENT_DATA'
+    ).length,
+    errorCount: results.filter((item) => item.status === 'ERROR').length,
+    results
+  };
+};
+
+export const signalScanService = {
+  async runScan(options?: {
+    symbols?: string[];
+    forceRefresh?: boolean;
+    includeRealLegal?: boolean;
+  }): Promise<SignalScanSummary> {
+    if (activeScanPromise) {
+      throw new ScanAlreadyRunningError();
+    }
+
+    activeScanPromise = runScanInternal(options).finally(() => {
+      activeScanPromise = null;
+    });
+
+    return activeScanPromise;
   }
 };
 
@@ -216,11 +286,27 @@ export const startSignalScanSchedule = () => {
       logger.info(
         {
           cron: env.SIGNAL_SCAN_CRON,
-          timezone: env.SIGNAL_SCAN_TIMEZONE
+          timezone: env.SIGNAL_SCAN_TIMEZONE,
+          symbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS
         },
         'Starting scheduled signal scan'
       );
-      await signalScanService.runScan();
+
+      try {
+        await signalScanService.runScan();
+      } catch (error) {
+        if (error instanceof ScanAlreadyRunningError) {
+          logger.warn(
+            {
+              cron: env.SIGNAL_SCAN_CRON
+            },
+            'Skipping scheduled signal scan because another scan is already running'
+          );
+          return;
+        }
+
+        throw error;
+      }
     },
     {
       timezone: env.SIGNAL_SCAN_TIMEZONE
@@ -230,7 +316,8 @@ export const startSignalScanSchedule = () => {
   logger.info(
     {
       cron: env.SIGNAL_SCAN_CRON,
-      timezone: env.SIGNAL_SCAN_TIMEZONE
+      timezone: env.SIGNAL_SCAN_TIMEZONE,
+      symbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS
     },
     'Signal scan schedule registered'
   );

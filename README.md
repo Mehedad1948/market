@@ -127,6 +127,7 @@ SIGNAL_SCAN_TIMEZONE=Asia/Tehran
 SIGNAL_SCAN_SYMBOLS=
 SIGNAL_SCAN_FORCE_REFRESH=false
 SIGNAL_SCAN_INCLUDE_REAL_LEGAL=false
+SIGNAL_SCAN_SYMBOL_DELAY_MS=30000
 COMPOSITE_SCORING_VERSION=3
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX_REQUESTS=60
@@ -244,6 +245,15 @@ curl -X POST "http://localhost:3000/api/stocks/scan" \
 ```
 
 If `symbols` is omitted, the scan uses `SIGNAL_SCAN_SYMBOLS` first and then falls back to tracked symbols already stored in the database.
+
+Scheduled and manual scans process symbols sequentially and wait `SIGNAL_SCAN_SYMBOL_DELAY_MS` between symbols to avoid bursting external API and database load.
+
+### Latest Cached Analyses
+
+```bash
+curl "http://localhost:3000/api/stocks/analyses/latest?limit=20"
+curl "http://localhost:3000/api/stocks/analyses/latest?limit=20&includeResult=true"
+```
 
 ## Analysis Logic
 

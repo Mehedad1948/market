@@ -27,7 +27,8 @@ export const buildEnvDiagnostics = () => ({
   dbOperationTimeoutMs: env.DB_OPERATION_TIMEOUT_MS,
   signalScanEnabled: env.SIGNAL_SCAN_ENABLED,
   signalScanCron: env.SIGNAL_SCAN_CRON,
-  signalScanTimezone: env.SIGNAL_SCAN_TIMEZONE
+  signalScanTimezone: env.SIGNAL_SCAN_TIMEZONE,
+  signalScanSymbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS
 });
 
 export const logger = pino({

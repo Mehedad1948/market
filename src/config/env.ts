@@ -14,7 +14,11 @@ const envSchema = z.object({
   BRS_BASE_URL: z.string().url(),
   AUTH_SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
   CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(86400),
-  ANALYSIS_REQUEST_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  ANALYSIS_REQUEST_RETENTION_DAYS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(30),
   ANALYSIS_CACHE_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
   HISTORY_MAX_AGE_HOURS: z.coerce.number().int().positive().default(24),
   MARKET_HOURS_HISTORY_MAX_AGE_MINUTES: z.coerce
@@ -23,8 +27,14 @@ const envSchema = z.object({
     .positive()
     .default(15),
   MARKET_TIMEZONE: z.string().min(1).default('Asia/Tehran'),
-  MARKET_OPEN_TIME: z.string().regex(/^\d{2}:\d{2}$/).default('09:00'),
-  MARKET_CLOSE_TIME: z.string().regex(/^\d{2}:\d{2}$/).default('12:30'),
+  MARKET_OPEN_TIME: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('09:00'),
+  MARKET_CLOSE_TIME: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('12:30'),
   DEFAULT_WEEKLY_WINDOW: z.coerce.number().int().positive().default(7),
   DEFAULT_MONTHLY_WINDOW: z.coerce.number().int().positive().default(30),
   DEFAULT_QUARTERLY_WINDOW: z.coerce.number().int().positive().default(90),
@@ -67,6 +77,11 @@ const envSchema = z.object({
   SIGNAL_SCAN_SYMBOLS: z.string().default(''),
   SIGNAL_SCAN_FORCE_REFRESH: z.coerce.boolean().default(false),
   SIGNAL_SCAN_INCLUDE_REAL_LEGAL: z.coerce.boolean().default(false),
+  SIGNAL_SCAN_SYMBOL_DELAY_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(30000),
   COMPOSITE_SCORING_VERSION: z.coerce.number().int().positive().default(3),
   DB_OPERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
