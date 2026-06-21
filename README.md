@@ -248,6 +248,14 @@ If `symbols` is omitted, the scan uses `SIGNAL_SCAN_SYMBOLS` first and then fall
 
 Scheduled and manual scans process symbols sequentially and wait `SIGNAL_SCAN_SYMBOL_DELAY_MS` between symbols to avoid bursting external API and database load.
 
+### Signal Scan Runtime Status
+
+```bash
+curl "http://localhost:3000/api/stocks/scan/status"
+```
+
+This endpoint is in-memory only. It shows the latest run start time, finish time, outcome, counters, and whether a scan is currently running. The status resets when the process restarts.
+
 ### Latest Cached Analyses
 
 ```bash

@@ -81,7 +81,34 @@ export type SignalScanSummary = {
   results: SignalScanItem[];
 };
 
+export type SignalScanRuntimeStatus = {
+  isRunning: boolean;
+  lastStartedAt: string | null;
+  lastFinishedAt: string | null;
+  lastOutcome: 'SUCCESS' | 'ERROR' | 'NEVER_RAN';
+  lastScannedAt: string | null;
+  lastSymbolsRequested: number | null;
+  lastScannedCount: number | null;
+  lastOkCount: number | null;
+  lastInsufficientDataCount: number | null;
+  lastErrorCount: number | null;
+  lastError: string | null;
+};
+
 let activeScanPromise: Promise<SignalScanSummary> | null = null;
+let scanRuntimeStatus: SignalScanRuntimeStatus = {
+  isRunning: false,
+  lastStartedAt: null,
+  lastFinishedAt: null,
+  lastOutcome: 'NEVER_RAN',
+  lastScannedAt: null,
+  lastSymbolsRequested: null,
+  lastScannedCount: null,
+  lastOkCount: null,
+  lastInsufficientDataCount: null,
+  lastErrorCount: null,
+  lastError: null
+};
 
 const runScanInternal = async (options?: {
   symbols?: string[];
@@ -260,11 +287,53 @@ export const signalScanService = {
       throw new ScanAlreadyRunningError();
     }
 
-    activeScanPromise = runScanInternal(options).finally(() => {
-      activeScanPromise = null;
-    });
+    scanRuntimeStatus = {
+      ...scanRuntimeStatus,
+      isRunning: true,
+      lastStartedAt: new Date().toISOString(),
+      lastError: null
+    };
+
+    activeScanPromise = runScanInternal(options)
+      .then((summary) => {
+        scanRuntimeStatus = {
+          ...scanRuntimeStatus,
+          isRunning: false,
+          lastFinishedAt: new Date().toISOString(),
+          lastOutcome: 'SUCCESS',
+          lastScannedAt: summary.scannedAt,
+          lastSymbolsRequested: summary.symbolsRequested,
+          lastScannedCount: summary.scannedCount,
+          lastOkCount: summary.okCount,
+          lastInsufficientDataCount: summary.insufficientDataCount,
+          lastErrorCount: summary.errorCount,
+          lastError: null
+        };
+
+        return summary;
+      })
+      .catch((error: unknown) => {
+        scanRuntimeStatus = {
+          ...scanRuntimeStatus,
+          isRunning: false,
+          lastFinishedAt: new Date().toISOString(),
+          lastOutcome: 'ERROR',
+          lastError: error instanceof Error ? error.message : 'Unknown scan error'
+        };
+
+        throw error;
+      })
+      .finally(() => {
+        activeScanPromise = null;
+      });
 
     return activeScanPromise;
+  },
+
+  getRuntimeStatus(): SignalScanRuntimeStatus {
+    return {
+      ...scanRuntimeStatus
+    };
   }
 };
 

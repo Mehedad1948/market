@@ -1,0 +1,76 @@
+import type { AddressInfo } from 'node:net';
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/services/signalScan.service', () => ({
+  signalScanService: {
+    runScan: vi.fn(),
+    getRuntimeStatus: vi.fn().mockReturnValue({
+      isRunning: false,
+      lastStartedAt: '2026-06-21T09:00:00.000Z',
+      lastFinishedAt: '2026-06-21T09:12:00.000Z',
+      lastOutcome: 'SUCCESS',
+      lastScannedAt: '2026-06-21T09:12:00.000Z',
+      lastSymbolsRequested: 20,
+      lastScannedCount: 20,
+      lastOkCount: 18,
+      lastInsufficientDataCount: 1,
+      lastErrorCount: 1,
+      lastError: null
+    })
+  },
+  ScanAlreadyRunningError: class ScanAlreadyRunningError extends Error {}
+}));
+
+import { createApp } from '../src/app';
+import { signalScanService } from '../src/services/signalScan.service';
+
+describe('signal scan status route', () => {
+  const app = createApp();
+  let server: ReturnType<typeof app.listen>;
+  let baseUrl = '';
+
+  beforeAll(async () => {
+    server = app.listen(0);
+    await new Promise<void>((resolve) => {
+      server.once('listening', () => resolve());
+    });
+
+    const address = server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns in-memory signal scan runtime status', async () => {
+    const response = await fetch(`${baseUrl}/api/stocks/scan/status`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'OK',
+      isRunning: false,
+      lastOutcome: 'SUCCESS',
+      lastSymbolsRequested: 20,
+      lastScannedCount: 20,
+      lastOkCount: 18,
+      lastInsufficientDataCount: 1,
+      lastErrorCount: 1
+    });
+    expect(signalScanService.getRuntimeStatus).toHaveBeenCalledTimes(1);
+  });
+});

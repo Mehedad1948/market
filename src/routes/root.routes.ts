@@ -102,6 +102,16 @@ const samples: RequestSample[] = [
     }
   },
   {
+    title: 'Signal Scan Runtime Status',
+    method: 'GET',
+    path: '/api/stocks/scan/status'
+  },
+  {
+    title: 'Latest Cached Analyses',
+    method: 'GET',
+    path: '/api/stocks/analyses/latest?limit=20'
+  },
+  {
     title: 'Invalid Window Validation Example',
     method: 'GET',
     path: '/api/stocks/%D9%81%D9%85%D9%84%DB%8C/analysis?weeklyWindow=30&monthlyWindow=7&quarterlyWindow=90'

@@ -669,3 +669,17 @@ export const runManualSignalScan = async (
 
   response.json(result);
 };
+
+export const getSignalScanStatus = async (
+  request: Request,
+  response: Response
+) => {
+  const runtimeStatus = signalScanService.getRuntimeStatus();
+
+  (request.log ?? logger).info(runtimeStatus, 'Signal scan status requested');
+
+  response.json({
+    status: 'OK',
+    ...runtimeStatus
+  });
+};
