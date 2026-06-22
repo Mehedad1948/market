@@ -675,11 +675,19 @@ export const getSignalScanStatus = async (
   response: Response
 ) => {
   const runtimeStatus = signalScanService.getRuntimeStatus();
+  const scheduleStatus = signalScanService.getScheduleStatus();
 
-  (request.log ?? logger).info(runtimeStatus, 'Signal scan status requested');
+  (request.log ?? logger).info(
+    {
+      ...runtimeStatus,
+      schedule: scheduleStatus
+    },
+    'Signal scan status requested'
+  );
 
   response.json({
     status: 'OK',
-    ...runtimeStatus
+    ...runtimeStatus,
+    schedule: scheduleStatus
   });
 };

@@ -5,10 +5,21 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 vi.mock('../src/services/signalScan.service', () => ({
   signalScanService: {
     runScan: vi.fn(),
+    getScheduleStatus: vi.fn().mockReturnValue({
+      enabled: true,
+      cron: '0 22 * * 0-4',
+      timezone: 'Asia/Tehran',
+      isRegistered: true,
+      taskStatus: 'idle',
+      nextRunAt: '2026-06-21T18:30:00.000Z',
+      serverTime: '2026-06-21T09:00:00.000Z',
+      timezoneLocalTime: '2026-06-21, 12:30:00'
+    }),
     getRuntimeStatus: vi.fn().mockReturnValue({
       isRunning: false,
       lastStartedAt: '2026-06-21T09:00:00.000Z',
       lastFinishedAt: '2026-06-21T09:12:00.000Z',
+      lastTriggeredAt: '2026-06-21T09:00:00.000Z',
       lastOutcome: 'SUCCESS',
       lastScannedAt: '2026-06-21T09:12:00.000Z',
       lastSymbolsRequested: 20,
@@ -65,12 +76,20 @@ describe('signal scan status route', () => {
       status: 'OK',
       isRunning: false,
       lastOutcome: 'SUCCESS',
+      lastTriggeredAt: '2026-06-21T09:00:00.000Z',
       lastSymbolsRequested: 20,
       lastScannedCount: 20,
       lastOkCount: 18,
       lastInsufficientDataCount: 1,
-      lastErrorCount: 1
+      lastErrorCount: 1,
+      schedule: {
+        enabled: true,
+        cron: '0 22 * * 0-4',
+        timezone: 'Asia/Tehran',
+        isRegistered: true
+      }
     });
     expect(signalScanService.getRuntimeStatus).toHaveBeenCalledTimes(1);
+    expect(signalScanService.getScheduleStatus).toHaveBeenCalledTimes(1);
   });
 });

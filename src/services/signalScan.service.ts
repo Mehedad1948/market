@@ -85,6 +85,7 @@ export type SignalScanRuntimeStatus = {
   isRunning: boolean;
   lastStartedAt: string | null;
   lastFinishedAt: string | null;
+  lastTriggeredAt: string | null;
   lastOutcome: 'SUCCESS' | 'ERROR' | 'NEVER_RAN';
   lastScannedAt: string | null;
   lastSymbolsRequested: number | null;
@@ -95,11 +96,23 @@ export type SignalScanRuntimeStatus = {
   lastError: string | null;
 };
 
+export type SignalScanScheduleStatus = {
+  enabled: boolean;
+  cron: string;
+  timezone: string;
+  isRegistered: boolean;
+  taskStatus: string | null;
+  nextRunAt: string | null;
+  serverTime: string;
+  timezoneLocalTime: string;
+};
+
 let activeScanPromise: Promise<SignalScanSummary> | null = null;
 let scanRuntimeStatus: SignalScanRuntimeStatus = {
   isRunning: false,
   lastStartedAt: null,
   lastFinishedAt: null,
+  lastTriggeredAt: null,
   lastOutcome: 'NEVER_RAN',
   lastScannedAt: null,
   lastSymbolsRequested: null,
@@ -108,6 +121,50 @@ let scanRuntimeStatus: SignalScanRuntimeStatus = {
   lastInsufficientDataCount: null,
   lastErrorCount: null,
   lastError: null
+};
+
+const formatTimeInZone = (date: Date, timezone: string): string => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(date);
+};
+
+const getTaskStatus = (task: ScheduledTask | null): string | null => {
+  if (!task) {
+    return null;
+  }
+
+  const candidate = task as ScheduledTask & {
+    getStatus?: () => string;
+  };
+
+  return typeof candidate.getStatus === 'function'
+    ? candidate.getStatus()
+    : 'UNKNOWN';
+};
+
+const getTaskNextRunAt = (task: ScheduledTask | null): string | null => {
+  if (!task) {
+    return null;
+  }
+
+  const candidate = task as ScheduledTask & {
+    getNextRun?: () => Date | null;
+  };
+
+  if (typeof candidate.getNextRun !== 'function') {
+    return null;
+  }
+
+  const nextRun = candidate.getNextRun();
+  return nextRun ? nextRun.toISOString() : null;
 };
 
 const runScanInternal = async (options?: {
@@ -294,6 +351,14 @@ export const signalScanService = {
       lastError: null
     };
 
+    logger.info(
+      {
+        options: options ?? {},
+        schedule: signalScanService.getScheduleStatus()
+      },
+      'Signal scan run started'
+    );
+
     activeScanPromise = runScanInternal(options)
       .then((summary) => {
         scanRuntimeStatus = {
@@ -310,6 +375,18 @@ export const signalScanService = {
           lastError: null
         };
 
+        logger.info(
+          {
+            scannedAt: summary.scannedAt,
+            symbolsRequested: summary.symbolsRequested,
+            scannedCount: summary.scannedCount,
+            okCount: summary.okCount,
+            insufficientDataCount: summary.insufficientDataCount,
+            errorCount: summary.errorCount
+          },
+          'Signal scan run completed'
+        );
+
         return summary;
       })
       .catch((error: unknown) => {
@@ -320,6 +397,8 @@ export const signalScanService = {
           lastOutcome: 'ERROR',
           lastError: error instanceof Error ? error.message : 'Unknown scan error'
         };
+
+        logger.error({ err: error }, 'Signal scan run failed');
 
         throw error;
       })
@@ -334,46 +413,87 @@ export const signalScanService = {
     return {
       ...scanRuntimeStatus
     };
+  },
+
+  getScheduleStatus(): SignalScanScheduleStatus {
+    const now = new Date();
+
+    return {
+      enabled: env.SIGNAL_SCAN_ENABLED,
+      cron: env.SIGNAL_SCAN_CRON,
+      timezone: env.SIGNAL_SCAN_TIMEZONE,
+      isRegistered: activeScanTask !== null,
+      taskStatus: getTaskStatus(activeScanTask),
+      nextRunAt: getTaskNextRunAt(activeScanTask),
+      serverTime: now.toISOString(),
+      timezoneLocalTime: formatTimeInZone(now, env.SIGNAL_SCAN_TIMEZONE)
+    };
   }
 };
 
 let activeScanTask: ScheduledTask | null = null;
 
 export const startSignalScanSchedule = () => {
+  logger.info(
+    signalScanService.getScheduleStatus(),
+    'Preparing signal scan scheduler'
+  );
+
   if (!env.SIGNAL_SCAN_ENABLED) {
-    logger.info('Signal scan schedule disabled by configuration');
+    logger.info(
+      signalScanService.getScheduleStatus(),
+      'Signal scan schedule disabled by configuration'
+    );
     return null;
   }
 
   if (activeScanTask) {
+    logger.info(
+      signalScanService.getScheduleStatus(),
+      'Signal scan schedule already registered'
+    );
     return activeScanTask;
   }
 
   activeScanTask = cron.schedule(
     env.SIGNAL_SCAN_CRON,
     async () => {
+      scanRuntimeStatus = {
+        ...scanRuntimeStatus,
+        lastTriggeredAt: new Date().toISOString()
+      };
+
       logger.info(
-        {
-          cron: env.SIGNAL_SCAN_CRON,
-          timezone: env.SIGNAL_SCAN_TIMEZONE,
-          symbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS
-        },
-        'Starting scheduled signal scan'
+        signalScanService.getScheduleStatus(),
+        'Scheduled signal scan trigger fired'
       );
 
       try {
-        await signalScanService.runScan();
+        const summary = await signalScanService.runScan();
+
+        logger.info(
+          {
+            scannedAt: summary.scannedAt,
+            scannedCount: summary.scannedCount,
+            okCount: summary.okCount,
+            insufficientDataCount: summary.insufficientDataCount,
+            errorCount: summary.errorCount
+          },
+          'Scheduled signal scan finished successfully'
+        );
       } catch (error) {
         if (error instanceof ScanAlreadyRunningError) {
           logger.warn(
             {
-              cron: env.SIGNAL_SCAN_CRON
+              cron: env.SIGNAL_SCAN_CRON,
+              runtimeStatus: signalScanService.getRuntimeStatus()
             },
             'Skipping scheduled signal scan because another scan is already running'
           );
           return;
         }
 
+        logger.error({ err: error }, 'Scheduled signal scan crashed');
         throw error;
       }
     },
@@ -383,11 +503,7 @@ export const startSignalScanSchedule = () => {
   );
 
   logger.info(
-    {
-      cron: env.SIGNAL_SCAN_CRON,
-      timezone: env.SIGNAL_SCAN_TIMEZONE,
-      symbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS
-    },
+    signalScanService.getScheduleStatus(),
     'Signal scan schedule registered'
   );
 

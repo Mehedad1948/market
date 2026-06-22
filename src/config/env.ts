@@ -72,7 +72,7 @@ const envSchema = z.object({
   LIQUIDITY_EXPANSION_THRESHOLD: z.coerce.number().positive().default(1.5),
   LIQUIDITY_CONTRACTION_THRESHOLD: z.coerce.number().positive().default(0.7),
   SIGNAL_SCAN_ENABLED: z.coerce.boolean().default(true),
-  SIGNAL_SCAN_CRON: z.string().min(1).default('0 16 * * 0-4'),
+  SIGNAL_SCAN_CRON: z.string().min(1).default('0 22 * * 0-4'),
   SIGNAL_SCAN_TIMEZONE: z.string().min(1).default('Asia/Tehran'),
   SIGNAL_SCAN_SYMBOLS: z.string().default(''),
   SIGNAL_SCAN_FORCE_REFRESH: z.coerce.boolean().default(true),
