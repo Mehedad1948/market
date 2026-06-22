@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { BrsApiError } from '../services/brsClient';
 import { InsufficientDataError } from '../services/analysis.service';
 import { logger } from '../lib/logger';
+import { telegramNotifier } from '../services/telegramNotifier.service';
 
 export class AppError extends Error {
   statusCode: number;
@@ -89,6 +90,12 @@ export const errorHandler = (
     { err: error, request: requestContext },
     '💥 Unhandled internal server error'
   );
+
+  void telegramNotifier.send('Unhandled internal server error', {
+    message: error.message,
+    name: error.name,
+    request: requestContext
+  });
 
   response.status(500).json({
     status: 'ERROR',

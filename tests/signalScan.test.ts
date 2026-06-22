@@ -236,4 +236,48 @@ describe('signalScan.service', () => {
 
     expect(analyzeSymbolMetrics).toHaveBeenCalledTimes(2);
   });
+
+  it('exposes live progress while a scan is running', async () => {
+    let releaseHistory: (() => void) | null = null;
+
+    getTrackedSymbols.mockResolvedValue(['TEST']);
+    getActiveCache.mockResolvedValue(null);
+    getSymbolHistory.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseHistory = () => resolve([{ date: '1403-01-01' }]);
+        })
+    );
+    analyzeSymbolMetrics.mockReturnValue({
+      latestDataDate: '1403-01-01',
+      signals: {
+        composite: {
+          action: {
+            value: 'HOLD'
+          },
+          score: 5
+        }
+      }
+    });
+
+    const pending = signalScanService.runScan({
+      symbols: ['TEST'],
+      forceRefresh: false
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(signalScanService.getRuntimeStatus()).toMatchObject({
+      isRunning: true,
+      currentSymbol: 'TEST',
+      currentSymbolIndex: 1,
+      symbolsTotal: 1,
+      symbolsCompleted: 0,
+      currentPhase: 'LOAD_SYMBOL_HISTORY'
+    });
+
+    releaseHistory?.();
+    await pending;
+  });
 });

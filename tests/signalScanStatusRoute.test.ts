@@ -27,7 +27,14 @@ vi.mock('../src/services/signalScan.service', () => ({
       lastOkCount: 18,
       lastInsufficientDataCount: 1,
       lastErrorCount: 1,
-      lastError: null
+      lastError: null,
+      currentPhase: 'IDLE',
+      currentPhaseStartedAt: null,
+      currentSymbol: null,
+      currentSymbolIndex: null,
+      symbolsTotal: 20,
+      symbolsCompleted: 20,
+      currentSymbolStartedAt: null
     })
   },
   ScanAlreadyRunningError: class ScanAlreadyRunningError extends Error {}
@@ -82,6 +89,9 @@ describe('signal scan status route', () => {
       lastOkCount: 18,
       lastInsufficientDataCount: 1,
       lastErrorCount: 1,
+      currentPhase: 'IDLE',
+      symbolsTotal: 20,
+      symbolsCompleted: 20,
       schedule: {
         enabled: true,
         cron: '0 22 * * 0-4',

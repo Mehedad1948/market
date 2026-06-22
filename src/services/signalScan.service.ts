@@ -5,6 +5,7 @@ import { logger } from '../lib/logger';
 import { analysisCacheRepository } from '../repositories/analysisCache.repository';
 import { symbolRepository } from '../repositories/symbol.repository';
 import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
+import { telegramNotifier } from './telegramNotifier.service';
 import {
   InsufficientDataError,
   analyzeSymbolMetrics,
@@ -94,6 +95,21 @@ export type SignalScanRuntimeStatus = {
   lastInsufficientDataCount: number | null;
   lastErrorCount: number | null;
   lastError: string | null;
+  currentPhase:
+    | 'IDLE'
+    | 'BUILD_WATCHLIST'
+    | 'REFRESH_SYMBOL_HISTORY'
+    | 'LOAD_SYMBOL_HISTORY'
+    | 'CHECK_CACHE'
+    | 'ANALYZE_SYMBOL'
+    | 'SAVE_CACHE'
+    | 'WAIT_SYMBOL_DELAY';
+  currentPhaseStartedAt: string | null;
+  currentSymbol: string | null;
+  currentSymbolIndex: number | null;
+  symbolsTotal: number | null;
+  symbolsCompleted: number | null;
+  currentSymbolStartedAt: string | null;
 };
 
 export type SignalScanScheduleStatus = {
@@ -120,7 +136,23 @@ let scanRuntimeStatus: SignalScanRuntimeStatus = {
   lastOkCount: null,
   lastInsufficientDataCount: null,
   lastErrorCount: null,
-  lastError: null
+  lastError: null,
+  currentPhase: 'IDLE',
+  currentPhaseStartedAt: null,
+  currentSymbol: null,
+  currentSymbolIndex: null,
+  symbolsTotal: null,
+  symbolsCompleted: null,
+  currentSymbolStartedAt: null
+};
+
+const updateRuntimeProgress = (
+  patch: Partial<SignalScanRuntimeStatus>
+): void => {
+  scanRuntimeStatus = {
+    ...scanRuntimeStatus,
+    ...patch
+  };
 };
 
 const formatTimeInZone = (date: Date, timezone: string): string => {
@@ -175,21 +207,50 @@ const runScanInternal = async (options?: {
   const forceRefresh = options?.forceRefresh ?? env.SIGNAL_SCAN_FORCE_REFRESH;
   const includeRealLegal =
     options?.includeRealLegal ?? env.SIGNAL_SCAN_INCLUDE_REAL_LEGAL;
+
+  updateRuntimeProgress({
+    currentPhase: 'BUILD_WATCHLIST',
+    currentPhaseStartedAt: new Date().toISOString()
+  });
+
   const symbols = await buildWatchlist(options?.symbols);
   const params = buildScanParams(forceRefresh, includeRealLegal);
   const paramsHash = buildAnalysisParamsHash(params);
   const results: SignalScanItem[] = [];
 
+  updateRuntimeProgress({
+    symbolsTotal: symbols.length,
+    symbolsCompleted: 0
+  });
+
   for (const [index, symbol] of symbols.entries()) {
+    updateRuntimeProgress({
+      currentSymbol: symbol,
+      currentSymbolIndex: index + 1,
+      currentSymbolStartedAt: new Date().toISOString()
+    });
+
     try {
       if (forceRefresh) {
+        updateRuntimeProgress({
+          currentPhase: 'REFRESH_SYMBOL_HISTORY',
+          currentPhaseStartedAt: new Date().toISOString()
+        });
         await symbolDataService.refreshSymbolHistory(symbol, includeRealLegal);
       }
 
+      updateRuntimeProgress({
+        currentPhase: 'LOAD_SYMBOL_HISTORY',
+        currentPhaseStartedAt: new Date().toISOString()
+      });
       const history = await symbolRepository.getSymbolHistory(symbol);
       const latestDataDate = history.at(-1)?.date ?? null;
 
       if (!forceRefresh && latestDataDate) {
+        updateRuntimeProgress({
+          currentPhase: 'CHECK_CACHE',
+          currentPhaseStartedAt: new Date().toISOString()
+        });
         const activeCache = await analysisCacheRepository.getActiveCache(
           symbol,
           paramsHash,
@@ -216,6 +277,10 @@ const runScanInternal = async (options?: {
             'Signal scan cache hit'
           );
         } else {
+          updateRuntimeProgress({
+            currentPhase: 'ANALYZE_SYMBOL',
+            currentPhaseStartedAt: new Date().toISOString()
+          });
           const result = analyzeSymbolMetrics(
             symbol,
             history,
@@ -225,6 +290,10 @@ const runScanInternal = async (options?: {
           );
           const expiresAt = new Date(Date.now() + env.CACHE_TTL_SECONDS * 1000);
 
+          updateRuntimeProgress({
+            currentPhase: 'SAVE_CACHE',
+            currentPhaseStartedAt: new Date().toISOString()
+          });
           await analysisCacheRepository.saveCache(
             symbol,
             paramsHash,
@@ -251,6 +320,10 @@ const runScanInternal = async (options?: {
           );
         }
       } else {
+        updateRuntimeProgress({
+          currentPhase: 'ANALYZE_SYMBOL',
+          currentPhaseStartedAt: new Date().toISOString()
+        });
         const result = analyzeSymbolMetrics(
           symbol,
           history,
@@ -260,6 +333,10 @@ const runScanInternal = async (options?: {
         );
         const expiresAt = new Date(Date.now() + env.CACHE_TTL_SECONDS * 1000);
 
+        updateRuntimeProgress({
+          currentPhase: 'SAVE_CACHE',
+          currentPhaseStartedAt: new Date().toISOString()
+        });
         await analysisCacheRepository.saveCache(
           symbol,
           paramsHash,
@@ -314,8 +391,16 @@ const runScanInternal = async (options?: {
       }
     }
 
+    updateRuntimeProgress({
+      symbolsCompleted: index + 1
+    });
+
     const hasMoreSymbols = index < symbols.length - 1;
     if (hasMoreSymbols && env.SIGNAL_SCAN_SYMBOL_DELAY_MS > 0) {
+      updateRuntimeProgress({
+        currentPhase: 'WAIT_SYMBOL_DELAY',
+        currentPhaseStartedAt: new Date().toISOString()
+      });
       await sleep(env.SIGNAL_SCAN_SYMBOL_DELAY_MS);
     }
   }
@@ -348,7 +433,14 @@ export const signalScanService = {
       ...scanRuntimeStatus,
       isRunning: true,
       lastStartedAt: new Date().toISOString(),
-      lastError: null
+      lastError: null,
+      currentPhase: 'BUILD_WATCHLIST',
+      currentPhaseStartedAt: new Date().toISOString(),
+      currentSymbol: null,
+      currentSymbolIndex: null,
+      symbolsTotal: null,
+      symbolsCompleted: 0,
+      currentSymbolStartedAt: null
     };
 
     logger.info(
@@ -372,7 +464,14 @@ export const signalScanService = {
           lastOkCount: summary.okCount,
           lastInsufficientDataCount: summary.insufficientDataCount,
           lastErrorCount: summary.errorCount,
-          lastError: null
+          lastError: null,
+          currentPhase: 'IDLE',
+          currentPhaseStartedAt: null,
+          currentSymbol: null,
+          currentSymbolIndex: null,
+          symbolsTotal: summary.symbolsRequested,
+          symbolsCompleted: summary.scannedCount,
+          currentSymbolStartedAt: null
         };
 
         logger.info(
@@ -387,6 +486,15 @@ export const signalScanService = {
           'Signal scan run completed'
         );
 
+        void telegramNotifier.send('Signal scan completed', {
+          scannedAt: summary.scannedAt,
+          symbolsRequested: summary.symbolsRequested,
+          scannedCount: summary.scannedCount,
+          okCount: summary.okCount,
+          insufficientDataCount: summary.insufficientDataCount,
+          errorCount: summary.errorCount
+        });
+
         return summary;
       })
       .catch((error: unknown) => {
@@ -395,10 +503,20 @@ export const signalScanService = {
           isRunning: false,
           lastFinishedAt: new Date().toISOString(),
           lastOutcome: 'ERROR',
-          lastError: error instanceof Error ? error.message : 'Unknown scan error'
+          lastError: error instanceof Error ? error.message : 'Unknown scan error',
+          currentPhase: 'IDLE',
+          currentPhaseStartedAt: null,
+          currentSymbol: null,
+          currentSymbolIndex: null,
+          currentSymbolStartedAt: null
         };
 
         logger.error({ err: error }, 'Signal scan run failed');
+        void telegramNotifier.send('Signal scan failed', {
+          error: error instanceof Error ? error.message : 'Unknown scan error',
+          schedule: signalScanService.getScheduleStatus(),
+          runtimeStatus: signalScanService.getRuntimeStatus()
+        });
 
         throw error;
       })
@@ -468,6 +586,10 @@ export const startSignalScanSchedule = () => {
         'Scheduled signal scan trigger fired'
       );
 
+      void telegramNotifier.send('Scheduled signal scan trigger fired', {
+        schedule: signalScanService.getScheduleStatus()
+      });
+
       try {
         const summary = await signalScanService.runScan();
 
@@ -494,6 +616,14 @@ export const startSignalScanSchedule = () => {
         }
 
         logger.error({ err: error }, 'Scheduled signal scan crashed');
+        void telegramNotifier.send('Scheduled signal scan crashed', {
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Unknown scheduled scan error',
+          schedule: signalScanService.getScheduleStatus(),
+          runtimeStatus: signalScanService.getRuntimeStatus()
+        });
         throw error;
       }
     },
@@ -506,6 +636,10 @@ export const startSignalScanSchedule = () => {
     signalScanService.getScheduleStatus(),
     'Signal scan schedule registered'
   );
+
+  void telegramNotifier.send('Signal scan schedule registered', {
+    schedule: signalScanService.getScheduleStatus()
+  });
 
   return activeScanTask;
 };
