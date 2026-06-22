@@ -3,9 +3,9 @@ import os from 'node:os';
 import axios from 'axios';
 
 import { env } from '../config/env';
-import { logger } from '../lib/logger';
+import { logger, maskSecret } from '../lib/logger';
 
-const NOTIFICATION_RELAY_URL = 'https://bale-bot-green.vercel.app/api/telegram';
+const BALE_BOT_API_BASE_URL = 'https://tapi.bale.ai';
 const MAX_MESSAGE_LENGTH = 3500;
 
 const formatDetails = (details?: Record<string, unknown>) => {
@@ -35,11 +35,24 @@ const buildMessage = (title: string, details?: Record<string, unknown>) => {
 };
 
 export const notifFunction = async (message: string): Promise<boolean> => {
+  if (!env.BALE_BOT_TOKEN.trim() || !env.BALE_BOT_CHAT_ID.trim()) {
+    logger.warn(
+      {
+        baleBotTokenConfigured: Boolean(env.BALE_BOT_TOKEN),
+        baleBotChatIdConfigured: Boolean(env.BALE_BOT_CHAT_ID)
+      },
+      'Bale notifier skipped because it is not fully configured'
+    );
+
+    return false;
+  }
+
   try {
     await axios.post(
-      NOTIFICATION_RELAY_URL,
+      `${BALE_BOT_API_BASE_URL}/bot${env.BALE_BOT_TOKEN}/sendMessage`,
       {
-        message
+        chat_id: env.BALE_BOT_CHAT_ID,
+        text: message
       },
       {
         timeout: 10000
@@ -51,10 +64,11 @@ export const notifFunction = async (message: string): Promise<boolean> => {
     logger.error(
       {
         err: error,
-        endpoint: NOTIFICATION_RELAY_URL,
+        endpoint: `${BALE_BOT_API_BASE_URL}/bot${maskSecret(env.BALE_BOT_TOKEN)}/sendMessage`,
+        baleBotChatIdConfigured: Boolean(env.BALE_BOT_CHAT_ID),
         messagePreview: message.slice(0, 200)
       },
-      'Notification relay request failed'
+      'Bale notification request failed'
     );
 
     return false;
@@ -63,7 +77,7 @@ export const notifFunction = async (message: string): Promise<boolean> => {
 
 export const telegramNotifier = {
   isConfigured() {
-    return true;
+    return Boolean(env.BALE_BOT_TOKEN.trim() && env.BALE_BOT_CHAT_ID.trim());
   },
 
   async send(title: string, details?: Record<string, unknown>) {

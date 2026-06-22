@@ -82,6 +82,8 @@ const envSchema = z.object({
     .int()
     .nonnegative()
     .default(30000),
+  BALE_BOT_TOKEN: z.string().default(''),
+  BALE_BOT_CHAT_ID: z.string().default(''),
   COMPOSITE_SCORING_VERSION: z.coerce.number().int().positive().default(3),
   DB_OPERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),

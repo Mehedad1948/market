@@ -28,7 +28,10 @@ export const buildEnvDiagnostics = () => ({
   signalScanEnabled: env.SIGNAL_SCAN_ENABLED,
   signalScanCron: env.SIGNAL_SCAN_CRON,
   signalScanTimezone: env.SIGNAL_SCAN_TIMEZONE,
-  signalScanSymbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS
+  signalScanSymbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS,
+  baleBotTokenConfigured: Boolean(env.BALE_BOT_TOKEN),
+  baleBotTokenPreview: maskSecret(env.BALE_BOT_TOKEN),
+  baleBotChatIdConfigured: Boolean(env.BALE_BOT_CHAT_ID)
 });
 
 export const logger = pino({
