@@ -57,7 +57,7 @@ export const telegramNotifier = {
         },
         'Telegram notifier skipped because it is not fully configured'
       );
-      return;
+      return false;
     }
 
     const text = buildMessage(title, details);
@@ -73,6 +73,8 @@ export const telegramNotifier = {
           timeout: 10000
         }
       );
+
+      return true;
     } catch (error) {
       logger.error(
         {
@@ -84,6 +86,8 @@ export const telegramNotifier = {
         },
         'Telegram notification failed'
       );
+
+      return false;
     }
   }
 };

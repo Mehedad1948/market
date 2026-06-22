@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import { logger, maskSecret } from '../lib/logger';
 import type { BrsHistoryTradeRow, BrsRealLegalRow } from '../types';
 import type { BrsAllSymbolItem } from '../types/symbolCatalog';
+import { telegramNotifier } from './telegramNotifier.service';
 
 export class BrsApiError extends Error {
   details: Record<string, unknown> | undefined;
@@ -122,6 +123,8 @@ const fetchHistory = async <T>(symbol: string, type: 0 | 1): Promise<T[]> => {
         '🚨 BrsApi request failed'
       );
 
+      void telegramNotifier.send('BrsApi request failed', details);
+
       throw new BrsApiError(error.message, details);
     }
 
@@ -133,6 +136,11 @@ const fetchHistory = async <T>(symbol: string, type: 0 | 1): Promise<T[]> => {
       },
       '🚨 Unexpected BrsApi client failure'
     );
+
+    void telegramNotifier.send('Unexpected BrsApi client failure', {
+      ...requestMeta,
+      durationMs: Date.now() - startedAt
+    });
 
     throw new BrsApiError('Failed to fetch data from BrsApi', requestMeta);
   }
@@ -190,6 +198,8 @@ const fetchAllSymbols = async (type = 1): Promise<BrsAllSymbolItem[]> => {
       };
 
       logger.error({ err: error, ...details }, '🚨 BrsApi symbols request failed');
+      void telegramNotifier.send('BrsApi symbols request failed', details);
+
       throw new BrsApiError(error.message, details);
     }
 
@@ -201,6 +211,11 @@ const fetchAllSymbols = async (type = 1): Promise<BrsAllSymbolItem[]> => {
       },
       '🚨 Unexpected BrsApi symbols client failure'
     );
+
+    void telegramNotifier.send('Unexpected BrsApi symbols client failure', {
+      ...requestMeta,
+      durationMs: Date.now() - startedAt
+    });
 
     throw new BrsApiError('Failed to fetch symbols from BrsApi', requestMeta);
   }

@@ -107,6 +107,12 @@ const samples: RequestSample[] = [
     path: '/api/stocks/scan/status'
   },
   {
+    title: 'Telegram Test Notification',
+    method: 'POST',
+    path: '/api/notifications/telegram/test',
+    body: {}
+  },
+  {
     title: 'Latest Cached Analyses',
     method: 'GET',
     path: '/api/stocks/analyses/latest?limit=20'
