@@ -23,6 +23,10 @@ app.listen(env.PORT, '0.0.0.0', () => {
 
   try {
     startSignalScanSchedule();
+    void telegramNotifier.send('Server started successfully', {
+      port: env.PORT,
+      env: buildEnvDiagnostics()
+    });
   } catch (error) {
     logger.error({ err: error }, '🧨 Failed to start signal scan schedule');
     void telegramNotifier.send('Failed to start signal scan schedule', {

@@ -28,11 +28,7 @@ export const buildEnvDiagnostics = () => ({
   signalScanEnabled: env.SIGNAL_SCAN_ENABLED,
   signalScanCron: env.SIGNAL_SCAN_CRON,
   signalScanTimezone: env.SIGNAL_SCAN_TIMEZONE,
-  signalScanSymbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS,
-  telegramNotificationsEnabled: env.TELEGRAM_NOTIFICATIONS_ENABLED,
-  telegramBotTokenConfigured: Boolean(env.TELEGRAM_BOT_TOKEN),
-  telegramBotTokenPreview: maskSecret(env.TELEGRAM_BOT_TOKEN),
-  telegramBotChatIdConfigured: Boolean(env.TELEGRAM_BOT_CHAT_ID)
+  signalScanSymbolDelayMs: env.SIGNAL_SCAN_SYMBOL_DELAY_MS
 });
 
 export const logger = pino({
