@@ -75,7 +75,7 @@ const envSchema = z.object({
   SIGNAL_SCAN_CRON: z.string().min(1).default('0 16 * * 0-4'),
   SIGNAL_SCAN_TIMEZONE: z.string().min(1).default('Asia/Tehran'),
   SIGNAL_SCAN_SYMBOLS: z.string().default(''),
-  SIGNAL_SCAN_FORCE_REFRESH: z.coerce.boolean().default(false),
+  SIGNAL_SCAN_FORCE_REFRESH: z.coerce.boolean().default(true),
   SIGNAL_SCAN_INCLUDE_REAL_LEGAL: z.coerce.boolean().default(false),
   SIGNAL_SCAN_SYMBOL_DELAY_MS: z.coerce
     .number()
