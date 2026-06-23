@@ -252,7 +252,9 @@ const serializeAnalysisSummary = (
     latestClosePrice: row.latestClosePrice,
     latestClosePriceChangePercent: row.latestClosePriceChangePercent,
     persianSummary: row.persianSummary,
-    ...(includeResult && row.result ? { result: row.result } : {})
+    ...(includeResult && row.result
+      ? { composite: row.result.signals.composite }
+      : {})
   };
 };
 

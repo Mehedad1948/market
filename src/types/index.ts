@@ -504,5 +504,6 @@ export type StockAnalysisCacheSummary = {
   latestClosePrice: number | null;
   latestClosePriceChangePercent: number | null;
   persianSummary: string | null;
+  composite?: StockAnalysisSignals['composite'];
   result?: StockAnalysisResult;
 };
