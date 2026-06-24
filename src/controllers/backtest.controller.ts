@@ -14,6 +14,7 @@ const indicatorComponentSchema = z.enum([
   'liquidity',
   'stochRsi',
   'priceTrend',
+  'mfi',
   'adx',
   'atr'
 ]);
@@ -22,11 +23,13 @@ const backtestComparisonVariantSchema = z.enum([
   'full_composite',
   'stochRsi_only',
   'priceTrend_only',
+  'mfi_only',
   'liquidity_only',
   'composite_without_atr',
   'composite_without_adx',
   'composite_without_stochRsi',
-  'composite_without_priceTrend'
+  'composite_without_priceTrend',
+  'composite_without_mfi'
 ]);
 
 const commaListSchema = z.preprocess((value) => {
@@ -41,10 +44,36 @@ const commaListSchema = z.preprocess((value) => {
   return value;
 }, z.array(z.string()).optional());
 
+const scoringOverridesSchema = z
+  .object({
+    liquidityWeight: z.number().positive().optional(),
+    stochRsiWeight: z.number().positive().optional(),
+    priceTrendWeight: z.number().positive().optional(),
+    mfiWeight: z.number().positive().optional(),
+    adxWeight: z.number().positive().optional(),
+    atrPenaltyWeight: z.number().positive().optional(),
+    trendResilienceWeight: z.number().positive().optional()
+  })
+  .optional();
+
 const cleanSymbolList = (symbols?: string[]) =>
   symbols
     ?.map((symbol) => symbol.trim())
     .filter((symbol) => symbol.length > 0);
+
+const cleanScoringOverrides = (
+  overrides?: z.infer<NonNullable<typeof scoringOverridesSchema>>
+) => {
+  if (!overrides) {
+    return undefined;
+  }
+
+  const entries = Object.entries(overrides).filter(
+    (entry): entry is [string, number] => entry[1] !== undefined
+  );
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
 
 const backtestRunBodySchema = z
   .object({
@@ -62,10 +91,17 @@ const backtestRunBodySchema = z
       .default(env.DEFAULT_QUARTERLY_WINDOW),
     includeRealLegal: z.boolean().optional().default(false),
     indicatorMode: z
-      .enum(['composite', 'liquidity_only', 'stochRsi_only', 'priceTrend_only'])
+      .enum([
+        'composite',
+        'liquidity_only',
+        'stochRsi_only',
+        'priceTrend_only',
+        'mfi_only'
+      ])
       .optional()
       .default('composite'),
-    disabledIndicators: z.array(indicatorComponentSchema).optional().default([])
+    disabledIndicators: z.array(indicatorComponentSchema).optional().default([]),
+    scoringOverrides: scoringOverridesSchema
   })
   .superRefine((value, ctx) => {
     if (
@@ -129,7 +165,8 @@ const backtestCompareBodySchema = z
       .default(env.DEFAULT_QUARTERLY_WINDOW),
     includeRealLegal: z.boolean().optional().default(false),
     reportLimit: z.number().int().positive().max(100000).optional(),
-    variants: z.array(backtestComparisonVariantSchema).optional()
+    variants: z.array(backtestComparisonVariantSchema).optional(),
+    scoringOverrides: scoringOverridesSchema
   })
   .superRefine((value, ctx) => {
     if (
@@ -157,6 +194,12 @@ export const runBacktest = async (request: Request, response: Response) => {
     indicatorMode: body.indicatorMode,
     disabledIndicators: body.disabledIndicators
   };
+  if (body.scoringOverrides !== undefined) {
+    const scoringOverrides = cleanScoringOverrides(body.scoringOverrides);
+    if (scoringOverrides !== undefined) {
+      options.scoringOverrides = scoringOverrides;
+    }
+  }
 
   if (symbols && symbols.length > 0) {
     options.symbols = symbols;
@@ -244,6 +287,12 @@ export const compareBacktests = async (
     quarterlyWindow: body.quarterlyWindow,
     includeRealLegal: body.includeRealLegal
   };
+  if (body.scoringOverrides !== undefined) {
+    const scoringOverrides = cleanScoringOverrides(body.scoringOverrides);
+    if (scoringOverrides !== undefined) {
+      options.scoringOverrides = scoringOverrides;
+    }
+  }
 
   if (body.dateFrom !== undefined) options.dateFrom = body.dateFrom;
   if (body.dateTo !== undefined) options.dateTo = body.dateTo;

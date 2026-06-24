@@ -1,6 +1,6 @@
 import type { SymbolDailyMetric } from '@prisma/client';
 
-import type { AdxAnalysis, AtrAnalysis } from '../types';
+import type { AdxAnalysis, AtrAnalysis, MfiAnalysis } from '../types';
 import { sortByDateAsc } from '../utils/dateSort';
 import { round } from '../utils/number';
 
@@ -271,3 +271,141 @@ export const calculateAdxAnalysis = (
   };
 };
 
+type OhlcvRow = OhlcRow & {
+  tradeValue: number;
+};
+
+const toValidOhlcvRows = (rows: SymbolDailyMetric[]): OhlcvRow[] => {
+  return sortByDateAsc(rows)
+    .map((row) => ({
+      date: row.date,
+      high: toNumber(row.priceMax),
+      low: toNumber(row.priceMin),
+      close: toNumber(row.closePrice),
+      tradeValue: toNumber(row.tradeValue)
+    }))
+    .filter(
+      (row): row is OhlcvRow =>
+        row.high !== null &&
+        row.low !== null &&
+        row.close !== null &&
+        row.tradeValue !== null &&
+        row.tradeValue > 0
+    );
+};
+
+const buildInsufficientMfi = (
+  period: number,
+  upperThreshold: number,
+  lowerThreshold: number
+): MfiAnalysis => {
+  return {
+    status: 'INSUFFICIENT_DATA',
+    period,
+    latestMfi: null,
+    previousMfi: null,
+    upperThreshold,
+    lowerThreshold,
+    direction: 'INSUFFICIENT_DATA',
+    overbought: false,
+    oversold: false,
+    bullishConfirmation: false,
+    bearishConfirmation: false,
+    accumulation: false,
+    distribution: false
+  };
+};
+
+export const calculateMfiAnalysis = (
+  rows: SymbolDailyMetric[],
+  period = 14,
+  lowerThreshold = 20,
+  upperThreshold = 80
+): MfiAnalysis => {
+  const validRows = toValidOhlcvRows(rows);
+
+  if (period <= 0 || validRows.length < period + 1) {
+    return buildInsufficientMfi(period, upperThreshold, lowerThreshold);
+  }
+
+  const moneyFlowSeries = validRows.map((row) => ({
+    typicalPrice: (row.high + row.low + row.close) / 3,
+    moneyFlow: row.tradeValue
+  }));
+  const mfiSeries: number[] = [];
+
+  for (let index = period; index < moneyFlowSeries.length; index += 1) {
+    let positiveFlow = 0;
+    let negativeFlow = 0;
+
+    for (let lookbackIndex = index - period + 1; lookbackIndex <= index; lookbackIndex += 1) {
+      const current = moneyFlowSeries[lookbackIndex];
+      const previous = moneyFlowSeries[lookbackIndex - 1];
+
+      if (!current || !previous) {
+        continue;
+      }
+
+      if (current.typicalPrice > previous.typicalPrice) {
+        positiveFlow += current.moneyFlow;
+      } else if (current.typicalPrice < previous.typicalPrice) {
+        negativeFlow += current.moneyFlow;
+      }
+    }
+
+    const mfi =
+      negativeFlow === 0
+        ? 100
+        : 100 - 100 / (1 + positiveFlow / negativeFlow);
+    mfiSeries.push(round(mfi));
+  }
+
+  const latestMfi = mfiSeries.at(-1) ?? null;
+  const previousMfi = mfiSeries.at(-2) ?? null;
+
+  if (latestMfi === null) {
+    return buildInsufficientMfi(period, upperThreshold, lowerThreshold);
+  }
+
+  const direction =
+    previousMfi === null
+      ? 'FLAT'
+      : latestMfi > previousMfi
+        ? 'RISING'
+        : latestMfi < previousMfi
+          ? 'FALLING'
+          : 'FLAT';
+  const overbought = latestMfi >= upperThreshold;
+  const oversold = latestMfi <= lowerThreshold;
+  const bullishConfirmation =
+    latestMfi >= 50 &&
+    direction === 'RISING' &&
+    !overbought;
+  const bearishConfirmation =
+    latestMfi < 50 &&
+    direction === 'FALLING' &&
+    !oversold;
+  const accumulation =
+    latestMfi >= 55 &&
+    latestMfi < upperThreshold &&
+    direction === 'RISING';
+  const distribution =
+    latestMfi <= 45 &&
+    direction === 'FALLING';
+
+  return {
+    status: 'OK',
+    period,
+    latestMfi,
+    previousMfi,
+    upperThreshold,
+    lowerThreshold,
+    direction,
+    overbought,
+    oversold,
+    bullishConfirmation,
+    bearishConfirmation,
+    accumulation,
+    distribution
+  };
+};

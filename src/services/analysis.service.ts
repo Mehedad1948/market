@@ -2,6 +2,7 @@ import type { SymbolDailyMetric } from '@prisma/client';
 
 import { env } from '../config/env';
 import type {
+  AnalysisScoringOverrides,
   AnalysisIndicatorComponent,
   AdxAnalysis,
   AdxDirectionalBiasValue,
@@ -17,6 +18,7 @@ import type {
   LiquidityTrendIntegrity,
   LiquidityMetrics,
   LabeledValue,
+  MfiAnalysis,
   MovingAverageAnalysis,
   PriceTrendAnalysis,
   PriceTrendConfig,
@@ -53,7 +55,8 @@ import { calculatePriceTrendAnalysis } from './priceTrend.service';
 import { calculateStochRsiAnalysis } from './stochRsi.service';
 import {
   calculateAdxAnalysis,
-  calculateAtrAnalysis
+  calculateAtrAnalysis,
+  calculateMfiAnalysis
 } from './technicalIndicators.service';
 
 const toNumber = (value: { toString(): string } | null): number | null => {
@@ -281,6 +284,9 @@ export const getPriceTrendConfig = (): PriceTrendConfig => {
 const ANALYSIS_CACHE_SIGNATURE = 'signals-labeled-values';
 const TREND_RESILIENCE_MID_BUFFER = 0.01;
 const TREND_RESILIENCE_LONG_BUFFER = 0.03;
+const MFI_PERIOD = 14;
+const MFI_LOWER_THRESHOLD = 20;
+const MFI_UPPER_THRESHOLD = 80;
 
 const calculateTrendResilience = (
   priceTrend: PriceTrendAnalysis
@@ -343,9 +349,27 @@ const analysisIndicatorComponents = [
   'liquidity',
   'stochRsi',
   'priceTrend',
+  'mfi',
   'adx',
   'atr'
 ] as const satisfies readonly AnalysisIndicatorComponent[];
+
+const defaultScoringOverrides = {
+  liquidityWeight: 1,
+  stochRsiWeight: 1,
+  priceTrendWeight: 1,
+  mfiWeight: 1,
+  adxWeight: 1,
+  atrPenaltyWeight: 1,
+  trendResilienceWeight: 1
+} as const satisfies Required<AnalysisScoringOverrides>;
+
+const resolveScoringOverrides = (
+  overrides?: AnalysisScoringOverrides
+): Required<AnalysisScoringOverrides> => ({
+  ...defaultScoringOverrides,
+  ...(overrides ?? {})
+});
 
 type AnalysisComponentState = Record<AnalysisIndicatorComponent, boolean>;
 
@@ -358,6 +382,7 @@ const buildAnalysisComponentState = (
     liquidity: true,
     stochRsi: true,
     priceTrend: true,
+    mfi: true,
     adx: true,
     atr: true
   };
@@ -367,6 +392,7 @@ const buildAnalysisComponentState = (
       liquidity: !disabled.has('liquidity'),
       stochRsi: false,
       priceTrend: false,
+      mfi: false,
       adx: false,
       atr: false
     };
@@ -377,6 +403,7 @@ const buildAnalysisComponentState = (
       liquidity: false,
       stochRsi: !disabled.has('stochRsi'),
       priceTrend: false,
+      mfi: false,
       adx: false,
       atr: false
     };
@@ -387,6 +414,18 @@ const buildAnalysisComponentState = (
       liquidity: false,
       stochRsi: false,
       priceTrend: !disabled.has('priceTrend'),
+      mfi: false,
+      adx: false,
+      atr: false
+    };
+  }
+
+  if (mode === 'mfi_only') {
+    return {
+      liquidity: false,
+      stochRsi: false,
+      priceTrend: false,
+      mfi: !disabled.has('mfi'),
       adx: false,
       atr: false
     };
@@ -418,6 +457,11 @@ export const buildAnalysisConfigForCache = () => {
       expansionThreshold: env.LIQUIDITY_EXPANSION_THRESHOLD,
       contractionThreshold: env.LIQUIDITY_CONTRACTION_THRESHOLD
     },
+    mfi: {
+      period: MFI_PERIOD,
+      lowerThreshold: MFI_LOWER_THRESHOLD,
+      upperThreshold: MFI_UPPER_THRESHOLD
+    },
     stochRsi: getStochRsiConfig(),
     priceTrend: getPriceTrendConfig()
   };
@@ -432,6 +476,7 @@ export const buildAnalysisParamsHash = (
     | 'includeRealLegal'
     | 'indicatorMode'
     | 'disabledIndicators'
+    | 'scoringOverrides'
   >
 ) => {
   return createHash({
@@ -441,6 +486,7 @@ export const buildAnalysisParamsHash = (
     includeRealLegal: params.includeRealLegal,
     indicatorMode: params.indicatorMode ?? 'composite',
     disabledIndicators: [...(params.disabledIndicators ?? [])].sort(),
+    scoringOverrides: resolveScoringOverrides(params.scoringOverrides),
     analysisConfig: buildAnalysisConfigForCache(),
     cacheSignature: ANALYSIS_CACHE_SIGNATURE
   });
@@ -643,6 +689,18 @@ const atrVolatilityLabelMap: Record<AtrAnalysis['volatilityRegime'], string> = {
   INSUFFICIENT_DATA: 'داده ناکافی'
 };
 
+const mfiStatusLabelMap: Record<MfiAnalysis['status'], string> = {
+  OK: 'Ready',
+  INSUFFICIENT_DATA: 'Insufficient data'
+};
+
+const mfiDirectionLabelMap: Record<MfiAnalysis['direction'], string> = {
+  RISING: 'Rising',
+  FALLING: 'Falling',
+  FLAT: 'Flat',
+  INSUFFICIENT_DATA: 'Insufficient data'
+};
+
 const getAdxDirectionalBias = (
   adx: AdxAnalysis
 ): LabeledValue<AdxDirectionalBiasValue> => {
@@ -761,6 +819,7 @@ type CoreSignalInputs = {
   priceTrend: PriceTrendAnalysis;
   trendResilience: TrendResilienceAnalysis;
   liquidityTrendIntegrity: LiquidityTrendIntegrity;
+  mfi: MfiAnalysis;
   components: AnalysisComponentState;
 };
 
@@ -771,6 +830,7 @@ const getCoreSignalVotes = ({
   priceTrend,
   trendResilience,
   liquidityTrendIntegrity,
+  mfi,
   components
 }: CoreSignalInputs) => {
   const bullishRegime =
@@ -814,6 +874,13 @@ const getCoreSignalVotes = ({
           bearish: priceTrend.bearish || priceTrend.warning
         }
       : null,
+    mfi: components.mfi
+      ? {
+          bullish: mfi.bullishConfirmation || mfi.accumulation,
+          strong: mfi.accumulation,
+          bearish: mfi.bearishConfirmation || mfi.distribution
+        }
+      : null,
     trendResilience:
       components.priceTrend && trendResilience.status === 'OK'
         ? {
@@ -848,10 +915,12 @@ const calculateTimeframeComposites = ({
   priceTrend,
   trendResilience,
   liquidityTrendIntegrity,
+  mfi,
   adx,
   atr,
   liquidityConfirmation,
-  components
+  components,
+  scoringOverrides
 }: {
   regime: AnalysisRegime;
   buy: BuyTimeframes;
@@ -860,11 +929,14 @@ const calculateTimeframeComposites = ({
   priceTrend: PriceTrendAnalysis;
   trendResilience: TrendResilienceAnalysis;
   liquidityTrendIntegrity: LiquidityTrendIntegrity;
+  mfi: MfiAnalysis;
   adx: AdxAnalysis;
   atr: AtrAnalysis;
   liquidityConfirmation?: LiquidityConfirmation;
   components: AnalysisComponentState;
+  scoringOverrides?: AnalysisScoringOverrides;
 }): CompositeTimeframes => {
+  const weights = resolveScoringOverrides(scoringOverrides);
   const { enabledCount, bullishCount, strongCount, bearishCount, bullishRegime } =
     getCoreSignalVotes({
       regime,
@@ -873,6 +945,7 @@ const calculateTimeframeComposites = ({
       priceTrend,
       trendResilience,
       liquidityTrendIntegrity,
+      mfi,
       components
     });
   const usingFullComposite =
@@ -888,6 +961,8 @@ const calculateTimeframeComposites = ({
     components.priceTrend &&
     trendResilience.status === 'OK' &&
     trendResilience.strongResilient;
+  const mfiBullish = components.mfi && (mfi.bullishConfirmation || mfi.accumulation);
+  const mfiBearish = components.mfi && (mfi.bearishConfirmation || mfi.distribution);
   const liquidityTrendIntact = liquidityTrendIntegrity.status === 'INTACT';
   const liquidityTrendWeakening = liquidityTrendIntegrity.status === 'WEAKENING';
   const liquidityTrendInvalidated =
@@ -906,32 +981,56 @@ const calculateTimeframeComposites = ({
   const coreBearishWeight = bearishCount * 25;
 
   const midTermScore = clampScore(
-    (components.liquidity && buy.midTerm ? 30 : 0) +
-      (components.priceTrend && priceTrend.bullish ? 25 : 0) +
-      (components.priceTrend && priceTrend.direction === 'IMPROVING' ? 10 : 0) +
-      (components.liquidity && bullishRegime ? 20 : 0) +
-      (components.liquidity && liquidityTrendIntact ? 10 : 0) +
-      (components.liquidity && liquidityTrendWeakening ? 4 : 0) +
-      (adxBullish ? 15 : 0) +
-      (components.liquidity && buy.longTerm ? 10 : 0) +
-      (components.stochRsi && stochRsi.probableBuy ? 10 : 0) +
-      (strongResilientTrend ? 12 : resilientTrend ? 6 : 0) +
-      (components.liquidity && liquidityConfirmation?.liquidityExpansion ? 5 : 0) -
+    (components.liquidity && buy.midTerm ? 30 * weights.liquidityWeight : 0) +
+      (components.priceTrend && priceTrend.bullish
+        ? 25 * weights.priceTrendWeight
+        : 0) +
+      (components.priceTrend && priceTrend.direction === 'IMPROVING'
+        ? 10 * weights.priceTrendWeight
+        : 0) +
+      (components.liquidity && bullishRegime ? 20 * weights.liquidityWeight : 0) +
+      (components.liquidity && liquidityTrendIntact
+        ? 10 * weights.liquidityWeight
+        : 0) +
+      (components.liquidity && liquidityTrendWeakening
+        ? 4 * weights.liquidityWeight
+        : 0) +
+      (mfiBullish ? 8 * weights.mfiWeight : 0) +
+      (adxBullish ? 15 * weights.adxWeight : 0) +
+      (components.liquidity && buy.longTerm ? 10 * weights.liquidityWeight : 0) +
+      (components.stochRsi && stochRsi.probableBuy
+        ? 10 * weights.stochRsiWeight
+        : 0) +
+      (strongResilientTrend
+        ? 12 * weights.trendResilienceWeight
+        : resilientTrend
+          ? 6 * weights.trendResilienceWeight
+          : 0) +
+      (components.liquidity && liquidityConfirmation?.liquidityExpansion
+        ? 5 * weights.liquidityWeight
+        : 0) -
       (components.stochRsi
         ? stochRsi.confirmedSell
-        ? 20
+        ? 20 * weights.stochRsiWeight
         : stochRsi.riskSell
-          ? 10
+          ? 10 * weights.stochRsiWeight
           : stochWarning
             ? strongResilientTrend
-              ? 1
-              : 4
+              ? 1 * weights.stochRsiWeight
+              : 4 * weights.stochRsiWeight
           : 0
         : 0) -
-      (components.priceTrend && priceTrend.bearish ? 25 : 0) -
-      (components.liquidity && regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
-      (components.liquidity && liquidityTrendInvalidated ? 20 : 0) -
-      (highAtr ? 5 : 0)
+      (components.priceTrend && priceTrend.bearish
+        ? 25 * weights.priceTrendWeight
+        : 0) -
+      (components.liquidity && regime === 'BEARISH_LIQUIDITY'
+        ? 35 * weights.liquidityWeight
+        : 0) -
+      (components.liquidity && liquidityTrendInvalidated
+        ? 20 * weights.liquidityWeight
+        : 0) -
+      (mfiBearish ? 10 * weights.mfiWeight : 0) -
+      (highAtr ? 5 * weights.atrPenaltyWeight : 0)
   );
 
   let midTermAction: TimeframeAction = 'WAIT';
@@ -1001,31 +1100,53 @@ const calculateTimeframeComposites = ({
   }
 
   const longTermScore = clampScore(
-    (components.liquidity && buy.longTerm ? 30 : 0) +
-      (components.priceTrend && priceTrend.closeAboveLongMa ? 25 : 0) +
-      (components.priceTrend && priceTrend.midAboveLongMa ? 20 : 0) +
-      (components.liquidity && bullishRegime ? 20 : 0) +
-      (components.liquidity && liquidityTrendIntact ? 12 : 0) +
-      (components.liquidity && liquidityTrendWeakening ? 5 : 0) +
-      (adxBullish ? 10 : 0) +
-      (components.stochRsi && stochRsi.probableBuy ? 5 : 0) +
-      (components.liquidity && buy.midTerm ? 5 : 0) +
-      (strongResilientTrend ? 15 : resilientTrend ? 8 : 0) -
+    (components.liquidity && buy.longTerm ? 30 * weights.liquidityWeight : 0) +
+      (components.priceTrend && priceTrend.closeAboveLongMa
+        ? 25 * weights.priceTrendWeight
+        : 0) +
+      (components.priceTrend && priceTrend.midAboveLongMa
+        ? 20 * weights.priceTrendWeight
+        : 0) +
+      (components.liquidity && bullishRegime ? 20 * weights.liquidityWeight : 0) +
+      (components.liquidity && liquidityTrendIntact
+        ? 12 * weights.liquidityWeight
+        : 0) +
+      (components.liquidity && liquidityTrendWeakening
+        ? 5 * weights.liquidityWeight
+        : 0) +
+      (mfiBullish ? 6 * weights.mfiWeight : 0) +
+      (adxBullish ? 10 * weights.adxWeight : 0) +
+      (components.stochRsi && stochRsi.probableBuy
+        ? 5 * weights.stochRsiWeight
+        : 0) +
+      (components.liquidity && buy.midTerm ? 5 * weights.liquidityWeight : 0) +
+      (strongResilientTrend
+        ? 15 * weights.trendResilienceWeight
+        : resilientTrend
+          ? 8 * weights.trendResilienceWeight
+          : 0) -
       (components.stochRsi
         ? stochRsi.confirmedSell
-        ? 10
+        ? 10 * weights.stochRsiWeight
         : stochRsi.riskSell
-          ? 5
+          ? 5 * weights.stochRsiWeight
           : stochWarning
             ? strongResilientTrend
               ? 0
-              : 2
+              : 2 * weights.stochRsiWeight
           : 0
         : 0) -
-      (components.priceTrend && priceTrend.bearish ? 35 : 0) -
-      (components.liquidity && regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
-      (components.liquidity && liquidityTrendInvalidated ? 25 : 0) -
-      (highAtr ? 5 : 0)
+      (components.priceTrend && priceTrend.bearish
+        ? 35 * weights.priceTrendWeight
+        : 0) -
+      (components.liquidity && regime === 'BEARISH_LIQUIDITY'
+        ? 35 * weights.liquidityWeight
+        : 0) -
+      (components.liquidity && liquidityTrendInvalidated
+        ? 25 * weights.liquidityWeight
+        : 0) -
+      (mfiBearish ? 8 * weights.mfiWeight : 0) -
+      (highAtr ? 5 * weights.atrPenaltyWeight : 0)
   );
 
   let longTermAction: TimeframeAction = 'WAIT';
@@ -1192,6 +1313,7 @@ const buildPresentationSignals = (
   stochRsi: StochRsiAnalysis,
   priceTrend: PriceTrendAnalysis,
   trendResilience: TrendResilienceAnalysis,
+  mfi: MfiAnalysis,
   adx: AdxAnalysis,
   atr: AtrAnalysis,
   composite: CompositeSignal,
@@ -1381,6 +1503,47 @@ const buildPresentationSignals = (
         describeLabel('Trend Fragility', 'Inactive')
       )
     },
+    mfi: {
+      ...mfi,
+      status: labeledValue(
+        mfi.status,
+        describeLabel('Money Flow Index Status', mfiStatusLabelMap[mfi.status])
+      ),
+      direction: labeledValue(
+        mfi.direction,
+        describeLabel('Money Flow Index Direction', mfiDirectionLabelMap[mfi.direction])
+      ),
+      overbought: labeledBoolean(
+        mfi.overbought,
+        describeLabel('Money Flow Index', 'Overbought'),
+        describeLabel('Money Flow Index', 'Not overbought')
+      ),
+      oversold: labeledBoolean(
+        mfi.oversold,
+        describeLabel('Money Flow Index', 'Oversold'),
+        describeLabel('Money Flow Index', 'Not oversold')
+      ),
+      bullishConfirmation: labeledBoolean(
+        mfi.bullishConfirmation,
+        describeLabel('Money Flow Confirmation', 'Bullish'),
+        describeLabel('Money Flow Confirmation', 'Not bullish')
+      ),
+      bearishConfirmation: labeledBoolean(
+        mfi.bearishConfirmation,
+        describeLabel('Money Flow Confirmation', 'Bearish'),
+        describeLabel('Money Flow Confirmation', 'Not bearish')
+      ),
+      accumulation: labeledBoolean(
+        mfi.accumulation,
+        describeLabel('Money Flow State', 'Accumulation'),
+        describeLabel('Money Flow State', 'No accumulation')
+      ),
+      distribution: labeledBoolean(
+        mfi.distribution,
+        describeLabel('Money Flow State', 'Distribution'),
+        describeLabel('Money Flow State', 'No distribution')
+      )
+    },
     adx: {
       ...adx,
       status: labeledValue(
@@ -1459,16 +1622,20 @@ export const calculateCompositeSignal = (
   stochRsi: StochRsiAnalysis,
   priceTrend: PriceTrendAnalysis,
   liquidityTrendIntegrity: LiquidityTrendIntegrity,
+  mfi: MfiAnalysis,
   adx?: AdxAnalysis,
   atr?: AtrAnalysis,
   liquidityConfirmation?: LiquidityConfirmation,
   components?: AnalysisComponentState,
-  trendResilience?: TrendResilienceAnalysis
+  trendResilience?: TrendResilienceAnalysis,
+  scoringOverrides?: AnalysisScoringOverrides
 ): CompositeSignal => {
+  const weights = resolveScoringOverrides(scoringOverrides);
   const activeComponents = components ?? {
     liquidity: true,
     stochRsi: true,
     priceTrend: true,
+    mfi: true,
     adx: true,
     atr: true
   };
@@ -1482,6 +1649,7 @@ export const calculateCompositeSignal = (
       priceTrend,
       trendResilience: activeTrendResilience,
       liquidityTrendIntegrity,
+      mfi,
       components: activeComponents
     });
   const usingFullComposite =
@@ -1501,6 +1669,8 @@ export const calculateCompositeSignal = (
     activeComponents.priceTrend &&
     activeTrendResilience.status === 'OK' &&
     activeTrendResilience.strongResilient;
+  const mfiBullish = activeComponents.mfi && (mfi.bullishConfirmation || mfi.accumulation);
+  const mfiBearish = activeComponents.mfi && (mfi.bearishConfirmation || mfi.distribution);
   const liquidityTrendIntact = liquidityTrendIntegrity.status === 'INTACT';
   const liquidityTrendWeakening = liquidityTrendIntegrity.status === 'WEAKENING';
   const liquidityTrendInvalidated =
@@ -1557,6 +1727,7 @@ export const calculateCompositeSignal = (
       buy.longTerm &&
       priceTrend.bullish &&
       !liquidityTrendInvalidated &&
+      !mfiBearish &&
       !stochRsi.riskSell &&
       !stochRsi.confirmedSell
     : enabledCount > 0 &&
@@ -1566,6 +1737,7 @@ export const calculateCompositeSignal = (
   const probableBuy = usingFullComposite
       ? stochRsi.probableBuy &&
       liquidityTrendIntegrity.canFollowBullishTrend &&
+      !mfiBearish &&
       !stochRsi.confirmedSell &&
       (buy.midTerm ||
         regime === 'CONFIRMED_BULLISH' ||
@@ -1649,44 +1821,64 @@ export const calculateCompositeSignal = (
 
   const stochPenalty = stochRsi.confirmedSell
     ? activeComponents.stochRsi
-      ? -50
+      ? -50 * weights.stochRsiWeight
       : 0
     : stochRsi.riskSell && activeComponents.stochRsi
-      ? -25
+      ? -25 * weights.stochRsiWeight
       : stochWarning && activeComponents.stochRsi
         ? strongResilientTrend
-          ? -3
-          : -8
+          ? -3 * weights.stochRsiWeight
+          : -8 * weights.stochRsiWeight
       : 0;
   const score = clampScore(
-    (activeComponents.liquidity && buy.midTerm ? 30 : 0) +
-      (activeComponents.liquidity && buy.longTerm ? 25 : 0) +
-      (activeComponents.stochRsi && stochRsi.probableBuy ? 10 : 0) +
-      (activeComponents.liquidity && liquidityTrendIntact ? 12 : 0) +
-      (activeComponents.liquidity && liquidityTrendWeakening ? 5 : 0) +
-      (strongResilientTrend ? 15 : resilientTrend ? 8 : 0) +
-      (activeComponents.priceTrend && priceTrend.direction === 'BULLISH' ? 20 : 0) +
-      (activeComponents.priceTrend && priceTrend.direction === 'IMPROVING'
-        ? 10
+    (activeComponents.liquidity ? (buy.midTerm ? 30 : 0) * weights.liquidityWeight : 0) +
+      (activeComponents.liquidity
+        ? (buy.longTerm ? 25 : 0) * weights.liquidityWeight
         : 0) +
-      (adxWeak ? -10 : 0) +
-      (adxStrongBullish ? 5 : 0) +
-      (adxStrongBearish ? -10 : 0) +
-      (highAtr ? -10 : 0) +
+      (activeComponents.stochRsi && stochRsi.probableBuy
+        ? 10 * weights.stochRsiWeight
+        : 0) +
+      (mfiBullish ? 10 * weights.mfiWeight : 0) +
+      (activeComponents.liquidity && liquidityTrendIntact
+        ? 12 * weights.liquidityWeight
+        : 0) +
+      (activeComponents.liquidity && liquidityTrendWeakening
+        ? 5 * weights.liquidityWeight
+        : 0) +
+      (strongResilientTrend
+        ? 15 * weights.trendResilienceWeight
+        : resilientTrend
+          ? 8 * weights.trendResilienceWeight
+          : 0) +
+      (activeComponents.priceTrend && priceTrend.direction === 'BULLISH'
+        ? 20 * weights.priceTrendWeight
+        : 0) +
+      (activeComponents.priceTrend && priceTrend.direction === 'IMPROVING'
+        ? 10 * weights.priceTrendWeight
+        : 0) +
+      (adxWeak ? -10 * weights.adxWeight : 0) +
+      (adxStrongBullish ? 5 * weights.adxWeight : 0) +
+      (adxStrongBearish ? -10 * weights.adxWeight : 0) +
+      (highAtr ? -10 * weights.atrPenaltyWeight : 0) +
       (activeComponents.liquidity && liquidityConfirmation?.liquidityExpansion
-        ? 5
+        ? 5 * weights.liquidityWeight
         : 0) +
       (activeComponents.liquidity && liquidityConfirmation?.liquidityContraction
-        ? -5
+        ? -5 * weights.liquidityWeight
         : 0) +
       stochPenalty -
-      (activeComponents.liquidity && regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
-      (activeComponents.liquidity && liquidityTrendInvalidated ? 20 : 0) -
+      (activeComponents.liquidity && regime === 'BEARISH_LIQUIDITY'
+        ? 35 * weights.liquidityWeight
+        : 0) -
+      (activeComponents.liquidity && liquidityTrendInvalidated
+        ? 20 * weights.liquidityWeight
+        : 0) -
+      (mfiBearish ? 12 * weights.mfiWeight : 0) -
       (activeComponents.priceTrend && priceTrend.direction === 'BEARISH'
-        ? 25
+        ? 25 * weights.priceTrendWeight
         : 0) -
       (activeComponents.priceTrend && priceTrend.direction === 'WEAKENING'
-        ? 10
+        ? 10 * weights.priceTrendWeight
         : 0)
   );
   const timeframes = calculateTimeframeComposites({
@@ -1697,6 +1889,7 @@ export const calculateCompositeSignal = (
     priceTrend,
     trendResilience: activeTrendResilience,
     liquidityTrendIntegrity,
+    mfi,
     adx:
       adx ??
       ({
@@ -1719,7 +1912,8 @@ export const calculateCompositeSignal = (
         volatilityRegime: 'INSUFFICIENT_DATA'
       } satisfies AtrAnalysis),
     ...(liquidityConfirmation ? { liquidityConfirmation } : {}),
-    components: activeComponents
+    components: activeComponents,
+    ...(scoringOverrides ? { scoringOverrides } : {})
   });
 
   return {
@@ -1909,6 +2103,12 @@ export const analyzeSymbolMetrics = (
     getPriceTrendConfig()
   );
   const trendResilience = calculateTrendResilience(priceTrend);
+  const mfi = calculateMfiAnalysis(
+    sortedRows,
+    MFI_PERIOD,
+    MFI_LOWER_THRESHOLD,
+    MFI_UPPER_THRESHOLD
+  );
   const atr = calculateAtrAnalysis(
     sortedRows,
     env.ATR_PERIOD,
@@ -1930,11 +2130,13 @@ export const analyzeSymbolMetrics = (
     stochRsi,
     priceTrend,
     liquidityTrendIntegrity,
+    mfi,
     adx,
     atr,
     liquidityConfirmation,
     componentState,
-    trendResilience
+    trendResilience,
+    params.scoringOverrides
   );
 
   return {
@@ -1978,6 +2180,7 @@ export const analyzeSymbolMetrics = (
       stochRsi,
       priceTrend,
       trendResilience,
+      mfi,
       adx,
       atr,
       composite,

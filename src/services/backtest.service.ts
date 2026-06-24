@@ -6,6 +6,7 @@ import { env } from '../config/env';
 import { logger } from '../lib/logger';
 import { backtestRepository, type BacktestReportSnapshotFilters } from '../repositories/backtest.repository';
 import type {
+  AnalysisScoringOverrides,
   AnalysisIndicatorComponent,
   IndicatorMode,
   StockAnalysisResult,
@@ -359,6 +360,7 @@ export type RunBacktestOptions = {
   includeRealLegal?: boolean;
   indicatorMode?: IndicatorMode;
   disabledIndicators?: AnalysisIndicatorComponent[];
+  scoringOverrides?: AnalysisScoringOverrides;
 };
 
 type BacktestRunError = {
@@ -375,7 +377,8 @@ const buildAnalysisParams = (options: RunBacktestOptions): SymbolAnalysisParams 
     forceRefresh: false,
     includeRealLegal: options.includeRealLegal ?? false,
     indicatorMode: options.indicatorMode ?? 'composite',
-    disabledIndicators: options.disabledIndicators ?? []
+    disabledIndicators: options.disabledIndicators ?? [],
+    ...(options.scoringOverrides ? { scoringOverrides: options.scoringOverrides } : {})
   };
 };
 
@@ -747,11 +750,13 @@ export type BacktestComparisonVariantKey =
   | 'full_composite'
   | 'stochRsi_only'
   | 'priceTrend_only'
+  | 'mfi_only'
   | 'liquidity_only'
   | 'composite_without_atr'
   | 'composite_without_adx'
   | 'composite_without_stochRsi'
-  | 'composite_without_priceTrend';
+  | 'composite_without_priceTrend'
+  | 'composite_without_mfi';
 
 export type CompareBacktestsOptions = {
   symbol: string;
@@ -762,6 +767,7 @@ export type CompareBacktestsOptions = {
   monthlyWindow?: number;
   quarterlyWindow?: number;
   includeRealLegal?: boolean;
+  scoringOverrides?: AnalysisScoringOverrides;
   variants?: BacktestComparisonVariantKey[];
   reportLimit?: number;
 };
@@ -785,6 +791,10 @@ const backtestComparisonVariants: Record<
     indicatorMode: 'priceTrend_only',
     disabledIndicators: []
   },
+  mfi_only: {
+    indicatorMode: 'mfi_only',
+    disabledIndicators: []
+  },
   liquidity_only: {
     indicatorMode: 'liquidity_only',
     disabledIndicators: []
@@ -804,6 +814,10 @@ const backtestComparisonVariants: Record<
   composite_without_priceTrend: {
     indicatorMode: 'composite',
     disabledIndicators: ['priceTrend']
+  },
+  composite_without_mfi: {
+    indicatorMode: 'composite',
+    disabledIndicators: ['mfi']
   }
 };
 
@@ -1260,6 +1274,9 @@ export const backtestService = {
       }
       if (options.includeRealLegal !== undefined) {
         runOptions.includeRealLegal = options.includeRealLegal;
+      }
+      if (options.scoringOverrides !== undefined) {
+        runOptions.scoringOverrides = options.scoringOverrides;
       }
 
       const runResult = await this.runBacktest(runOptions);

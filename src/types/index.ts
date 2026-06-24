@@ -40,12 +40,24 @@ export type SymbolAnalysisParams = {
   includeRealLegal: boolean;
   indicatorMode?: IndicatorMode;
   disabledIndicators?: AnalysisIndicatorComponent[];
+  scoringOverrides?: AnalysisScoringOverrides;
 };
+
+export type AnalysisScoringOverrides = Partial<{
+  liquidityWeight: number;
+  stochRsiWeight: number;
+  priceTrendWeight: number;
+  mfiWeight: number;
+  adxWeight: number;
+  atrPenaltyWeight: number;
+  trendResilienceWeight: number;
+}>;
 
 export type AnalysisIndicatorComponent =
   | 'liquidity'
   | 'stochRsi'
   | 'priceTrend'
+  | 'mfi'
   | 'adx'
   | 'atr';
 
@@ -53,7 +65,8 @@ export type IndicatorMode =
   | 'composite'
   | 'liquidity_only'
   | 'stochRsi_only'
-  | 'priceTrend_only';
+  | 'priceTrend_only'
+  | 'mfi_only';
 
 export type MovingAverageAnalysis = {
   maWeekly: number;
@@ -262,6 +275,28 @@ export type AtrAnalysis = {
   volatilityRegime: AtrVolatilityRegime;
 };
 
+export type MfiTrendDirection =
+  | 'RISING'
+  | 'FALLING'
+  | 'FLAT'
+  | 'INSUFFICIENT_DATA';
+
+export type MfiAnalysis = {
+  status: 'OK' | 'INSUFFICIENT_DATA';
+  period: number;
+  latestMfi: number | null;
+  previousMfi: number | null;
+  upperThreshold: number;
+  lowerThreshold: number;
+  direction: MfiTrendDirection;
+  overbought: boolean;
+  oversold: boolean;
+  bullishConfirmation: boolean;
+  bearishConfirmation: boolean;
+  accumulation: boolean;
+  distribution: boolean;
+};
+
 export type AdxTrendStrength =
   | 'WEAK'
   | 'MODERATE'
@@ -424,6 +459,26 @@ export type StockAnalysisSignals = {
     resilient: LabeledValue<boolean>;
     strongResilient: LabeledValue<boolean>;
     fragile: LabeledValue<boolean>;
+  };
+  mfi: Omit<
+    MfiAnalysis,
+    | 'status'
+    | 'direction'
+    | 'overbought'
+    | 'oversold'
+    | 'bullishConfirmation'
+    | 'bearishConfirmation'
+    | 'accumulation'
+    | 'distribution'
+  > & {
+    status: LabeledValue<MfiAnalysis['status']>;
+    direction: LabeledValue<MfiTrendDirection>;
+    overbought: LabeledValue<boolean>;
+    oversold: LabeledValue<boolean>;
+    bullishConfirmation: LabeledValue<boolean>;
+    bearishConfirmation: LabeledValue<boolean>;
+    accumulation: LabeledValue<boolean>;
+    distribution: LabeledValue<boolean>;
   };
   adx: Omit<
     AdxAnalysis,
