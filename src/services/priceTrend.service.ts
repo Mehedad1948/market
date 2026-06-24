@@ -239,6 +239,10 @@ export const calculatePriceTrendAnalysis = (
     config.minSlope
   );
 
+  const warning =
+    direction === 'WEAKENING' &&
+    (!closeAboveMidMa || !fastAboveMidMa || !midAboveLongMa);
+
   return {
     status: 'OK',
     latestDate: latestRow.date,
@@ -257,6 +261,6 @@ export const calculatePriceTrendAnalysis = (
     direction,
     bullish: direction === 'BULLISH' || direction === 'IMPROVING',
     bearish: direction === 'BEARISH',
-    warning: direction === 'WEAKENING' || !closeAboveFastMa
+    warning
   };
 };

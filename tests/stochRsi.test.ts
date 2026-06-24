@@ -94,6 +94,16 @@ describe('stochRsi.service', () => {
     expect(analysis.greenBullishCrossCount).toBeGreaterThanOrEqual(1);
   });
 
+  it('does not mark riskSell after only one recent red-zone bearish cross', () => {
+    const rows = createRows([100, 98, 96, 94, 92, 94, 96, 98, 96]);
+    const analysis = calculateStochRsiAnalysis(rows, defaultConfig);
+
+    expect(analysis.redBearishCrossCount).toBe(1);
+    expect(analysis.crossDownInRed).toBe(true);
+    expect(analysis.riskSell).toBe(false);
+    expect(analysis.confirmedSell).toBe(false);
+  });
+
   it('marks riskSell after two red-zone bearish crosses inside lookback', () => {
     const rows = createRows([
       100, 98, 96, 94, 92, 94, 96, 98, 96, 94, 96, 98, 96, 94, 92
@@ -104,18 +114,26 @@ describe('stochRsi.service', () => {
     expect(analysis.riskSell).toBe(true);
   });
 
-  it('marks confirmedSell when riskSell is active and K is below D below upper threshold', () => {
+  it('marks confirmedSell when the second red-zone bearish cross is the recent active signal', () => {
     const rows = createRows([
-      100, 98, 96, 94, 92, 94, 96, 98, 96, 94, 96, 98, 97
+      100, 98, 96, 94, 92, 94, 96, 98, 96, 94, 96, 98, 96, 94, 92, 97, 95, 93
     ]);
     const analysis = calculateStochRsiAnalysis(rows, defaultConfig);
 
     expect(analysis.riskSell).toBe(true);
-    expect(analysis.latestK).not.toBeNull();
-    expect(analysis.latestD).not.toBeNull();
-    expect(analysis.latestK!).toBeLessThan(analysis.latestD!);
-    expect(analysis.latestK!).toBeLessThan(defaultConfig.upper);
+    expect(analysis.crossDownInRed).toBe(true);
     expect(analysis.confirmedSell).toBe(true);
+  });
+
+  it('does not mark confirmedSell when sell risk exists but the latest move is no longer bearish follow-through', () => {
+    const rows = createRows([
+      100, 98, 96, 94, 92, 94, 96, 98, 96, 94, 96, 98, 96, 94, 92, 97, 95, 93, 95
+    ]);
+    const analysis = calculateStochRsiAnalysis(rows, defaultConfig);
+
+    expect(analysis.redBearishCrossCount).toBeGreaterThanOrEqual(2);
+    expect(analysis.riskSell).toBe(true);
+    expect(analysis.confirmedSell).toBe(false);
   });
 
   it('returns INSUFFICIENT_DATA without breaking alignment when closes are missing', () => {

@@ -152,6 +152,90 @@ model AnalysisRequest {
   @@index([symbol, createdAt])
 }
 
+model BacktestRun {
+  id            String   @id @default(uuid())
+  status        String   @default("RUNNING")
+  paramsHash    String
+  params        Json
+  scoringVersion Int
+  horizons      Json
+  symbols       Json
+  symbolCount   Int      @default(0)
+  snapshotCount Int      @default(0)
+  skippedCount  Int      @default(0)
+  errorCount    Int      @default(0)
+  errors        Json?
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  snapshots BacktestSignalSnapshot[]
+
+  @@index([status, startedAt])
+  @@index([paramsHash, scoringVersion, startedAt])
+}
+
+model BacktestSignalSnapshot {
+  id             String      @id @default(uuid())
+  runId          String
+  run            BacktestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  symbol         String
+  asOfDate       String
+  sectorId       String?
+  sectorName     String?
+  latestClosePrice Decimal? @db.Decimal(30, 4)
+
+  compositeAction      String
+  compositeScore       Int
+  compositeBias        String
+  compositeEntryTiming String
+
+  shortAction              String
+  shortScore               Int
+  shortQuality             String
+  shortForNewPosition      String
+  shortForExistingPosition String
+  midAction                String
+  midScore                 Int
+  midQuality               String
+  midForNewPosition        String
+  midForExistingPosition   String
+  longAction               String
+  longScore                Int
+  longQuality              String
+  longForNewPosition       String
+  longForExistingPosition  String
+
+  atrVolatilityRegime String
+  relativeTradeValue20 Decimal? @db.Decimal(30, 8)
+  liquidityBucket      String
+
+  forwardReturn1d  Decimal? @db.Decimal(30, 8)
+  forwardReturn5d  Decimal? @db.Decimal(30, 8)
+  forwardReturn20d Decimal? @db.Decimal(30, 8)
+  forwardReturn60d Decimal? @db.Decimal(30, 8)
+  maxDrawdown1d    Decimal? @db.Decimal(30, 8)
+  maxDrawdown5d    Decimal? @db.Decimal(30, 8)
+  maxDrawdown20d   Decimal? @db.Decimal(30, 8)
+  maxDrawdown60d   Decimal? @db.Decimal(30, 8)
+
+  createdAt DateTime @default(now())
+
+  @@unique([runId, symbol, asOfDate])
+  @@index([runId, compositeAction])
+  @@index([runId, asOfDate])
+  @@index([runId, sectorName])
+  @@index([runId, liquidityBucket])
+  @@index([runId, atrVolatilityRegime])
+  @@index([runId, shortForNewPosition])
+  @@index([runId, shortForExistingPosition])
+  @@index([runId, midForNewPosition])
+  @@index([runId, midForExistingPosition])
+  @@index([runId, longForNewPosition])
+  @@index([runId, longForExistingPosition])
+}
+
 model User {
   id               String              @id @default(uuid())
   displayName      String?

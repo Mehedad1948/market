@@ -286,16 +286,13 @@ export const calculateStochRsiAnalysis = (
     barsSinceLastGreenCrossUp <= config.buyLookback &&
     ((latestK !== null && latestD !== null && latestK > latestD) ||
       recentGreenCross);
-  const riskSell =
-    redBearishCrossCount >= 2 ||
-    (barsSinceLastRedCrossDown !== null &&
-      barsSinceLastRedCrossDown <= config.signalMaxAge);
+  const riskSell = redBearishCrossCount >= 2;
   const confirmedSell =
     riskSell &&
+    recentRedCross &&
     latestK !== null &&
     latestD !== null &&
-    latestK < latestD &&
-    latestK < config.upper;
+    latestK < latestD;
 
   return {
     status,

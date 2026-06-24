@@ -38,7 +38,22 @@ export type SymbolAnalysisParams = {
   quarterlyWindow: number;
   forceRefresh: boolean;
   includeRealLegal: boolean;
+  indicatorMode?: IndicatorMode;
+  disabledIndicators?: AnalysisIndicatorComponent[];
 };
+
+export type AnalysisIndicatorComponent =
+  | 'liquidity'
+  | 'stochRsi'
+  | 'priceTrend'
+  | 'adx'
+  | 'atr';
+
+export type IndicatorMode =
+  | 'composite'
+  | 'liquidity_only'
+  | 'stochRsi_only'
+  | 'priceTrend_only';
 
 export type MovingAverageAnalysis = {
   maWeekly: number;
@@ -67,6 +82,27 @@ export type LiquidityConfirmation = {
   relativeTradeValue20: number | null;
   liquidityExpansion: boolean;
   liquidityContraction: boolean;
+};
+
+export type LiquidityTrendIntegrityStatus =
+  | 'INTACT'
+  | 'WEAKENING'
+  | 'INVALIDATED';
+
+export type LiquidityTrendIntegrity = {
+  status: LiquidityTrendIntegrityStatus;
+  weeklyAboveMonthly: boolean;
+  monthlyAboveQuarterly: boolean;
+  latestAboveWeeklyMa: boolean;
+  latestAboveMonthlyMa: boolean;
+  latestAboveQuarterlyMa: boolean;
+  weeklySlopePositive: boolean;
+  monthlySlopePositive: boolean;
+  quarterlySlopeNonNegative: boolean;
+  recentBearishWeeklyCross: boolean;
+  recentBearishMonthlyCross: boolean;
+  canFollowBullishTrend: boolean;
+  canUsePullbacks: boolean;
 };
 
 export type BuyTimeframes = {
@@ -295,6 +331,15 @@ export type PriceTrendConfig = {
   minSlope: number;
 };
 
+export type TrendResilienceAnalysis = {
+  status: 'OK' | 'INSUFFICIENT_DATA';
+  closeVsMidPercent: number | null;
+  closeVsLongPercent: number | null;
+  resilient: boolean;
+  strongResilient: boolean;
+  fragile: boolean;
+};
+
 export type AnalysisRegime =
   | 'STRONG_BULLISH_LIQUIDITY'
   | 'EARLY_BULLISH'
@@ -370,6 +415,15 @@ export type StockAnalysisSignals = {
     bullish: LabeledValue<boolean>;
     bearish: LabeledValue<boolean>;
     warning: LabeledValue<boolean>;
+  };
+  trendResilience: Omit<
+    TrendResilienceAnalysis,
+    'status' | 'resilient' | 'strongResilient' | 'fragile'
+  > & {
+    status: LabeledValue<TrendResilienceAnalysis['status']>;
+    resilient: LabeledValue<boolean>;
+    strongResilient: LabeledValue<boolean>;
+    fragile: LabeledValue<boolean>;
   };
   adx: Omit<
     AdxAnalysis,
@@ -486,6 +540,12 @@ export type StockAnalysisResult = {
     relativeTradeValue20: number | null;
     liquidityExpansion: boolean;
     liquidityContraction: boolean;
+    liquidityTrendIntegrity: LiquidityTrendIntegrity;
+  };
+  analysisProfile?: {
+    indicatorMode: IndicatorMode;
+    disabledIndicators: AnalysisIndicatorComponent[];
+    enabledIndicators: AnalysisIndicatorComponent[];
   };
   signals: StockAnalysisSignals;
   persianSummary: string;

@@ -47,7 +47,6 @@ export const generateBuyTimeframePersianSummary = (
 ): string => {
   const active: string[] = [];
 
-  if (buy.shortTerm) active.push('کوتاه‌مدت');
   if (buy.midTerm) active.push('میان‌مدت');
   if (buy.longTerm) active.push('بلندمدت');
 
@@ -71,6 +70,10 @@ const generateStochRsiPersianSummary = (
 
   if (stochRsi.riskSell) {
     return 'در اندیکاتور Stoch RSI، کراس نزولی در ناحیه قرمز مشاهده شده و به‌عنوان هشدار احتیاط در نظر گرفته می‌شود.';
+  }
+
+  if (stochRsi.crossDownInRed) {
+    return 'در اندیکاتور Stoch RSI، نخستین کراس نزولی در ناحیه قرمز دیده شده است؛ این مرحله بیشتر هشدار کاهش مومنتوم است و هنوز به‌تنهایی سیگنال فروش قطعی محسوب نمی‌شود.';
   }
 
   if (stochRsi.probableBuy) {
@@ -232,7 +235,6 @@ const generateCompositeHorizonSummaries = (
   }
 
   return [
-    generateHorizonSummary('کوتاه‌مدت', composite.timeframes.shortTerm),
     generateHorizonSummary('میان‌مدت', composite.timeframes.midTerm),
     generateHorizonSummary('بلندمدت', composite.timeframes.longTerm)
   ];

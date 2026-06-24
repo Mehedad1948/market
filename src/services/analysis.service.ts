@@ -2,6 +2,7 @@ import type { SymbolDailyMetric } from '@prisma/client';
 
 import { env } from '../config/env';
 import type {
+  AnalysisIndicatorComponent,
   AdxAnalysis,
   AdxDirectionalBiasValue,
   AnalysisConfidence,
@@ -13,17 +14,20 @@ import type {
   CompositeSignal,
   CompositeTimeframes,
   LiquidityConfirmation,
+  LiquidityTrendIntegrity,
   LiquidityMetrics,
   LabeledValue,
   MovingAverageAnalysis,
   PriceTrendAnalysis,
   PriceTrendConfig,
+  TrendResilienceAnalysis,
   SellTimeframes,
   StockAnalysisSignals,
   StochRsiAnalysis,
   StochRsiConfig,
   StockAnalysisResult,
   SymbolAnalysisParams,
+  IndicatorMode,
   ExistingPositionAdvice,
   NewPositionAdvice,
   TimeframeAction,
@@ -69,7 +73,8 @@ export const isAboveBy = (a: number, b: number, threshold = 0.02): boolean => {
 
 export const calculateBuyTimeframes = (
   metrics: LiquidityMetrics,
-  threshold = 0.02
+  threshold = 0.02,
+  liquidityTrendIntegrity?: LiquidityTrendIntegrity
 ): BuyTimeframes => {
   const {
     latestTradeValue,
@@ -82,18 +87,80 @@ export const calculateBuyTimeframes = (
   } = metrics;
 
   return {
-    shortTerm:
-      isAboveBy(maWeekly, maMonthly, threshold) &&
-      weeklySlope > 0 &&
-      latestTradeValue > maWeekly,
+    shortTerm: false,
     midTerm:
+      (liquidityTrendIntegrity === undefined ||
+        liquidityTrendIntegrity.status !== 'INVALIDATED') &&
       isAboveBy(maMonthly, maQuarterly, threshold) &&
       monthlySlope > 0 &&
-      latestTradeValue > maMonthly,
+      latestTradeValue > maMonthly &&
+      (liquidityTrendIntegrity?.canFollowBullishTrend ?? true),
     longTerm:
+      (liquidityTrendIntegrity === undefined ||
+        liquidityTrendIntegrity.status === 'INTACT') &&
       quarterlySlope > 0 &&
       maMonthly > maQuarterly &&
-      latestTradeValue > maQuarterly
+      latestTradeValue > maQuarterly &&
+      (liquidityTrendIntegrity?.canFollowBullishTrend ?? true)
+  };
+};
+
+const calculateLiquidityTrendIntegrity = (
+  metrics: LiquidityMetrics,
+  movingAverageAnalysis: MovingAverageAnalysis,
+  liquidityConfirmation?: LiquidityConfirmation
+): LiquidityTrendIntegrity => {
+  const weeklyAboveMonthly = metrics.maWeekly > metrics.maMonthly;
+  const monthlyAboveQuarterly = metrics.maMonthly > metrics.maQuarterly;
+  const latestAboveWeeklyMa = metrics.latestTradeValue > metrics.maWeekly;
+  const latestAboveMonthlyMa = metrics.latestTradeValue > metrics.maMonthly;
+  const latestAboveQuarterlyMa = metrics.latestTradeValue > metrics.maQuarterly;
+  const weeklySlopePositive = metrics.weeklySlope > 0;
+  const monthlySlopePositive = metrics.monthlySlope > 0;
+  const quarterlySlopeNonNegative = metrics.quarterlySlope >= 0;
+  const recentBearishWeeklyCross = movingAverageAnalysis.crossWeeklyBelowMonthly;
+  const recentBearishMonthlyCross =
+    movingAverageAnalysis.crossMonthlyBelowQuarterly;
+  const structuralBullish =
+    weeklyAboveMonthly && monthlyAboveQuarterly && monthlySlopePositive;
+  const structuralSupportive =
+    monthlyAboveQuarterly && monthlySlopePositive && quarterlySlopeNonNegative;
+  const invalidated =
+    recentBearishMonthlyCross ||
+    !monthlyAboveQuarterly ||
+    (!latestAboveQuarterlyMa && !quarterlySlopeNonNegative) ||
+    (!latestAboveMonthlyMa && !monthlySlopePositive);
+  const intact =
+    structuralBullish &&
+    latestAboveMonthlyMa &&
+    latestAboveQuarterlyMa &&
+    !recentBearishWeeklyCross &&
+    !recentBearishMonthlyCross &&
+    !(liquidityConfirmation?.liquidityContraction ?? false);
+  const weakening =
+    !intact &&
+    !invalidated &&
+    (structuralSupportive || latestAboveQuarterlyMa);
+
+  return {
+    status: intact ? 'INTACT' : weakening ? 'WEAKENING' : 'INVALIDATED',
+    weeklyAboveMonthly,
+    monthlyAboveQuarterly,
+    latestAboveWeeklyMa,
+    latestAboveMonthlyMa,
+    latestAboveQuarterlyMa,
+    weeklySlopePositive,
+    monthlySlopePositive,
+    quarterlySlopeNonNegative,
+    recentBearishWeeklyCross,
+    recentBearishMonthlyCross,
+    canFollowBullishTrend: intact || weakening,
+    canUsePullbacks:
+      intact ||
+      (weakening &&
+        structuralSupportive &&
+        latestAboveQuarterlyMa &&
+        !recentBearishMonthlyCross)
   };
 };
 
@@ -212,6 +279,127 @@ export const getPriceTrendConfig = (): PriceTrendConfig => {
 };
 
 const ANALYSIS_CACHE_SIGNATURE = 'signals-labeled-values';
+const TREND_RESILIENCE_MID_BUFFER = 0.01;
+const TREND_RESILIENCE_LONG_BUFFER = 0.03;
+
+const calculateTrendResilience = (
+  priceTrend: PriceTrendAnalysis
+): TrendResilienceAnalysis => {
+  if (
+    priceTrend.status !== 'OK' ||
+    priceTrend.latestClosePrice === null ||
+    priceTrend.midMa === null ||
+    priceTrend.longMa === null ||
+    priceTrend.fastSlope === null ||
+    priceTrend.midSlope === null ||
+    priceTrend.longSlope === null
+  ) {
+    return {
+      status: 'INSUFFICIENT_DATA',
+      closeVsMidPercent: null,
+      closeVsLongPercent: null,
+      resilient: false,
+      strongResilient: false,
+      fragile: false
+    };
+  }
+
+  const closeVsMidPercent =
+    priceTrend.midMa !== 0
+      ? round((priceTrend.latestClosePrice - priceTrend.midMa) / priceTrend.midMa)
+      : null;
+  const closeVsLongPercent =
+    priceTrend.longMa !== 0
+      ? round((priceTrend.latestClosePrice - priceTrend.longMa) / priceTrend.longMa)
+      : null;
+  const resilient =
+    priceTrend.closeAboveMidMa &&
+    priceTrend.closeAboveLongMa &&
+    priceTrend.midAboveLongMa &&
+    priceTrend.midSlope > 0 &&
+    priceTrend.longSlope >= 0;
+  const strongResilient =
+    resilient &&
+    priceTrend.fastAboveMidMa &&
+    priceTrend.fastSlope > 0 &&
+    (closeVsMidPercent ?? -Infinity) >= TREND_RESILIENCE_MID_BUFFER &&
+    (closeVsLongPercent ?? -Infinity) >= TREND_RESILIENCE_LONG_BUFFER;
+  const fragile =
+    !priceTrend.closeAboveMidMa ||
+    !priceTrend.midAboveLongMa ||
+    (priceTrend.fastSlope < 0 && priceTrend.midSlope <= 0);
+
+  return {
+    status: 'OK',
+    closeVsMidPercent,
+    closeVsLongPercent,
+    resilient,
+    strongResilient,
+    fragile
+  };
+};
+
+const analysisIndicatorComponents = [
+  'liquidity',
+  'stochRsi',
+  'priceTrend',
+  'adx',
+  'atr'
+] as const satisfies readonly AnalysisIndicatorComponent[];
+
+type AnalysisComponentState = Record<AnalysisIndicatorComponent, boolean>;
+
+const buildAnalysisComponentState = (
+  params: Pick<SymbolAnalysisParams, 'indicatorMode' | 'disabledIndicators'>
+): AnalysisComponentState => {
+  const mode = params.indicatorMode ?? 'composite';
+  const disabled = new Set(params.disabledIndicators ?? []);
+  const baseState: AnalysisComponentState = {
+    liquidity: true,
+    stochRsi: true,
+    priceTrend: true,
+    adx: true,
+    atr: true
+  };
+
+  if (mode === 'liquidity_only') {
+    return {
+      liquidity: !disabled.has('liquidity'),
+      stochRsi: false,
+      priceTrend: false,
+      adx: false,
+      atr: false
+    };
+  }
+
+  if (mode === 'stochRsi_only') {
+    return {
+      liquidity: false,
+      stochRsi: !disabled.has('stochRsi'),
+      priceTrend: false,
+      adx: false,
+      atr: false
+    };
+  }
+
+  if (mode === 'priceTrend_only') {
+    return {
+      liquidity: false,
+      stochRsi: false,
+      priceTrend: !disabled.has('priceTrend'),
+      adx: false,
+      atr: false
+    };
+  }
+
+  for (const component of analysisIndicatorComponents) {
+    if (disabled.has(component)) {
+      baseState[component] = false;
+    }
+  }
+
+  return baseState;
+};
 
 export const buildAnalysisConfigForCache = () => {
   return {
@@ -238,7 +426,12 @@ export const buildAnalysisConfigForCache = () => {
 export const buildAnalysisParamsHash = (
   params: Pick<
     SymbolAnalysisParams,
-    'weeklyWindow' | 'monthlyWindow' | 'quarterlyWindow' | 'includeRealLegal'
+    | 'weeklyWindow'
+    | 'monthlyWindow'
+    | 'quarterlyWindow'
+    | 'includeRealLegal'
+    | 'indicatorMode'
+    | 'disabledIndicators'
   >
 ) => {
   return createHash({
@@ -246,6 +439,8 @@ export const buildAnalysisParamsHash = (
     monthlyWindow: params.monthlyWindow,
     quarterlyWindow: params.quarterlyWindow,
     includeRealLegal: params.includeRealLegal,
+    indicatorMode: params.indicatorMode ?? 'composite',
+    disabledIndicators: [...(params.disabledIndicators ?? [])].sort(),
     analysisConfig: buildAnalysisConfigForCache(),
     cacheSignature: ANALYSIS_CACHE_SIGNATURE
   });
@@ -255,24 +450,22 @@ export const calculateSellTimeframes = (
   regime: AnalysisRegime,
   buy: BuyTimeframes,
   stochRsi: StochRsiAnalysis,
-  priceTrend: PriceTrendAnalysis
+  priceTrend: PriceTrendAnalysis,
+  liquidityTrendIntegrity?: LiquidityTrendIntegrity
 ): SellTimeframes => {
   return {
-    shortTerm:
-      stochRsi.riskSell ||
-      stochRsi.confirmedSell ||
-      priceTrend.warning ||
-      regime === 'SHORT_TERM_WARNING',
+    shortTerm: false,
     midTerm:
-      stochRsi.confirmedSell &&
-      (!buy.midTerm ||
-        priceTrend.bearish ||
-        regime === 'SHORT_TERM_WARNING' ||
-        regime === 'BEARISH_LIQUIDITY'),
+      liquidityTrendIntegrity?.status === 'INVALIDATED' ||
+      (stochRsi.confirmedSell &&
+        (!buy.midTerm ||
+          priceTrend.bearish ||
+          regime === 'BEARISH_LIQUIDITY')),
     longTerm:
-      regime === 'BEARISH_LIQUIDITY' &&
-      stochRsi.confirmedSell &&
-      priceTrend.bearish
+      liquidityTrendIntegrity?.status === 'INVALIDATED' ||
+      (regime === 'BEARISH_LIQUIDITY' &&
+        stochRsi.confirmedSell &&
+        priceTrend.bearish)
   };
 };
 
@@ -561,191 +754,354 @@ const buildTimeframeComposite = (
   };
 };
 
+type CoreSignalInputs = {
+  regime: AnalysisRegime;
+  buy: BuyTimeframes;
+  stochRsi: StochRsiAnalysis;
+  priceTrend: PriceTrendAnalysis;
+  trendResilience: TrendResilienceAnalysis;
+  liquidityTrendIntegrity: LiquidityTrendIntegrity;
+  components: AnalysisComponentState;
+};
+
+const getCoreSignalVotes = ({
+  regime,
+  buy,
+  stochRsi,
+  priceTrend,
+  trendResilience,
+  liquidityTrendIntegrity,
+  components
+}: CoreSignalInputs) => {
+  const bullishRegime =
+    regime === 'STRONG_BULLISH_LIQUIDITY' ||
+    regime === 'EARLY_BULLISH' ||
+    regime === 'CONFIRMED_BULLISH';
+  const bearishLiquidity = regime === 'BEARISH_LIQUIDITY';
+  const stochWarning =
+    stochRsi.crossDownInRed && !stochRsi.riskSell && !stochRsi.confirmedSell;
+
+  const votes = {
+    liquidity: components.liquidity
+      ? {
+          bullish:
+            liquidityTrendIntegrity.canFollowBullishTrend ||
+            bullishRegime ||
+            buy.midTerm ||
+            buy.longTerm,
+          strong:
+            liquidityTrendIntegrity.status === 'INTACT' &&
+            buy.midTerm &&
+            buy.longTerm &&
+            regime !== 'BEARISH_LIQUIDITY',
+          bearish:
+            bearishLiquidity ||
+            liquidityTrendIntegrity.status === 'INVALIDATED'
+        }
+      : null,
+    stochRsi: components.stochRsi
+      ? {
+          bullish: stochRsi.probableBuy,
+          strong: stochRsi.probableBuy && !stochRsi.riskSell && !stochRsi.confirmedSell,
+          bearish: stochRsi.riskSell || stochRsi.confirmedSell
+        }
+      : null,
+    priceTrend: components.priceTrend
+      ? {
+          bullish:
+            priceTrend.bullish || priceTrend.direction === 'IMPROVING',
+          strong: priceTrend.bullish,
+          bearish: priceTrend.bearish || priceTrend.warning
+        }
+      : null,
+    trendResilience:
+      components.priceTrend && trendResilience.status === 'OK'
+        ? {
+            bullish: trendResilience.resilient,
+            strong: trendResilience.strongResilient,
+            bearish: trendResilience.fragile
+          }
+      : null
+  };
+
+  const coreComponents = Object.entries(votes).filter(([, value]) => value !== null);
+  const enabledCount = coreComponents.length;
+  const bullishCount = coreComponents.filter(([, value]) => value?.bullish).length;
+  const strongCount = coreComponents.filter(([, value]) => value?.strong).length;
+  const bearishCount = coreComponents.filter(([, value]) => value?.bearish).length;
+
+  return {
+    votes,
+    enabledCount,
+    bullishCount,
+    strongCount,
+    bearishCount,
+    bullishRegime
+  };
+};
+
 const calculateTimeframeComposites = ({
   regime,
   buy,
   sell,
   stochRsi,
   priceTrend,
+  trendResilience,
+  liquidityTrendIntegrity,
   adx,
   atr,
-  liquidityConfirmation
+  liquidityConfirmation,
+  components
 }: {
   regime: AnalysisRegime;
   buy: BuyTimeframes;
   sell: SellTimeframes;
   stochRsi: StochRsiAnalysis;
   priceTrend: PriceTrendAnalysis;
+  trendResilience: TrendResilienceAnalysis;
+  liquidityTrendIntegrity: LiquidityTrendIntegrity;
   adx: AdxAnalysis;
   atr: AtrAnalysis;
   liquidityConfirmation?: LiquidityConfirmation;
+  components: AnalysisComponentState;
 }): CompositeTimeframes => {
-  const bullishRegime =
-    regime === 'STRONG_BULLISH_LIQUIDITY' ||
-    regime === 'EARLY_BULLISH' ||
-    regime === 'CONFIRMED_BULLISH';
-  const adxBullish = adx.bullishDirectionalBias;
-  const highAtr = atr.volatilityRegime === 'HIGH';
-
-  const shortTermScore = clampScore(
-    (stochRsi.probableBuy ? 30 : 0) +
-      (buy.shortTerm ? 25 : 0) +
-      (priceTrend.bullish || priceTrend.direction === 'IMPROVING' ? 20 : 0) +
-      (adxBullish ? 10 : 0) +
-      (bullishRegime ? 10 : 0) -
-      (stochRsi.confirmedSell
-        ? 50
-        : stochRsi.riskSell
-          ? 35
-          : 0) -
-      (priceTrend.warning ? 20 : 0) -
-      (highAtr ? 15 : 0) -
-      (regime === 'SHORT_TERM_WARNING' ? 20 : 0) -
-      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0)
-  );
-
-  let shortTermAction: TimeframeAction = 'WAIT';
-  let shortTermExplanationKey = 'timeframe.short.wait';
-
-  if (stochRsi.confirmedSell && priceTrend.bearish) {
-    shortTermAction = 'EXIT';
-    shortTermExplanationKey = 'timeframe.short.exitConfirmedSell';
-  } else if (stochRsi.confirmedSell) {
-    shortTermAction = 'REDUCE';
-    shortTermExplanationKey = 'timeframe.short.reduceConfirmedSell';
-  } else if (stochRsi.riskSell || priceTrend.warning || highAtr) {
-    shortTermAction = 'CAUTION';
-    shortTermExplanationKey = 'timeframe.short.caution';
-  } else if (
-    shortTermScore >= 70 &&
-    stochRsi.probableBuy &&
-    buy.shortTerm &&
-    priceTrend.bullish
-  ) {
-    shortTermAction = 'BUY';
-    shortTermExplanationKey = 'timeframe.short.buyReady';
-  } else if (shortTermScore >= 35 && stochRsi.probableBuy) {
-    shortTermAction = 'PROBABLE_BUY';
-    shortTermExplanationKey = 'timeframe.short.probableBuy';
-  } else if (shortTermScore >= 20) {
-    shortTermAction = 'HOLD';
-    shortTermExplanationKey = 'timeframe.short.hold';
-  }
+  const { enabledCount, bullishCount, strongCount, bearishCount, bullishRegime } =
+    getCoreSignalVotes({
+      regime,
+      buy,
+      stochRsi,
+      priceTrend,
+      trendResilience,
+      liquidityTrendIntegrity,
+      components
+    });
+  const usingFullComposite =
+    components.liquidity && components.stochRsi && components.priceTrend;
+  const stochWarning =
+    components.stochRsi &&
+    stochRsi.crossDownInRed &&
+    !stochRsi.riskSell &&
+    !stochRsi.confirmedSell;
+  const resilientTrend =
+    components.priceTrend && trendResilience.status === 'OK' && trendResilience.resilient;
+  const strongResilientTrend =
+    components.priceTrend &&
+    trendResilience.status === 'OK' &&
+    trendResilience.strongResilient;
+  const liquidityTrendIntact = liquidityTrendIntegrity.status === 'INTACT';
+  const liquidityTrendWeakening = liquidityTrendIntegrity.status === 'WEAKENING';
+  const liquidityTrendInvalidated =
+    liquidityTrendIntegrity.status === 'INVALIDATED';
+  const trendDeteriorating =
+    components.priceTrend &&
+    priceTrend.bearish &&
+    !resilientTrend;
+  const severeTrendDeterioration =
+    trendDeteriorating &&
+    (!components.liquidity || liquidityTrendInvalidated || !buy.midTerm);
+  const adxBullish = components.adx && adx.bullishDirectionalBias;
+  const adxBearish = components.adx && adx.bearishDirectionalBias;
+  const highAtr = components.atr && atr.volatilityRegime === 'HIGH';
+  const coreBullishWeight = bullishCount * 30 + strongCount * 15;
+  const coreBearishWeight = bearishCount * 25;
 
   const midTermScore = clampScore(
-    (buy.midTerm ? 30 : 0) +
-      (priceTrend.bullish ? 25 : 0) +
-      (bullishRegime ? 20 : 0) +
+    (components.liquidity && buy.midTerm ? 30 : 0) +
+      (components.priceTrend && priceTrend.bullish ? 25 : 0) +
+      (components.priceTrend && priceTrend.direction === 'IMPROVING' ? 10 : 0) +
+      (components.liquidity && bullishRegime ? 20 : 0) +
+      (components.liquidity && liquidityTrendIntact ? 10 : 0) +
+      (components.liquidity && liquidityTrendWeakening ? 4 : 0) +
       (adxBullish ? 15 : 0) +
-      (buy.longTerm ? 10 : 0) +
-      (stochRsi.probableBuy ? 10 : 0) +
-      (liquidityConfirmation?.liquidityExpansion ? 5 : 0) -
-      (stochRsi.confirmedSell
-        ? 40
+      (components.liquidity && buy.longTerm ? 10 : 0) +
+      (components.stochRsi && stochRsi.probableBuy ? 10 : 0) +
+      (strongResilientTrend ? 12 : resilientTrend ? 6 : 0) +
+      (components.liquidity && liquidityConfirmation?.liquidityExpansion ? 5 : 0) -
+      (components.stochRsi
+        ? stochRsi.confirmedSell
+        ? 20
         : stochRsi.riskSell
-          ? 25
-          : 0) -
-      (priceTrend.bearish ? 25 : 0) -
-      (regime === 'SHORT_TERM_WARNING' ? 20 : 0) -
-      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
-      (highAtr ? 10 : 0)
+          ? 10
+          : stochWarning
+            ? strongResilientTrend
+              ? 1
+              : 4
+          : 0
+        : 0) -
+      (components.priceTrend && priceTrend.bearish ? 25 : 0) -
+      (components.liquidity && regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
+      (components.liquidity && liquidityTrendInvalidated ? 20 : 0) -
+      (highAtr ? 5 : 0)
   );
 
   let midTermAction: TimeframeAction = 'WAIT';
   let midTermExplanationKey = 'timeframe.mid.wait';
 
-  if (regime === 'BEARISH_LIQUIDITY' && priceTrend.bearish) {
+  if (
+    components.liquidity &&
+    liquidityTrendInvalidated &&
+    (!components.priceTrend || priceTrend.bearish || !buy.midTerm)
+  ) {
     midTermAction = 'EXIT';
     midTermExplanationKey = 'timeframe.mid.exitBearish';
-  } else if (stochRsi.confirmedSell && !buy.midTerm) {
+  } else if (components.stochRsi && stochRsi.confirmedSell && !buy.midTerm) {
     midTermAction = 'REDUCE';
     midTermExplanationKey = 'timeframe.mid.reduceConfirmedSell';
   } else if (
-    stochRsi.riskSell ||
-    priceTrend.warning ||
-    regime === 'SHORT_TERM_WARNING'
+    (components.stochRsi && stochRsi.confirmedSell && !buy.longTerm) ||
+    (components.liquidity && liquidityTrendInvalidated && !buy.midTerm) ||
+    (components.stochRsi &&
+      stochRsi.riskSell &&
+      (liquidityTrendInvalidated || severeTrendDeterioration))
   ) {
     midTermAction = 'CAUTION';
     midTermExplanationKey = 'timeframe.mid.caution';
   } else if (
-    midTermScore >= 70 &&
-    buy.midTerm &&
-    priceTrend.bullish &&
-    bullishRegime &&
-    stochRsi.probableBuy
+    usingFullComposite
+      ? midTermScore >= 70 &&
+        buy.midTerm &&
+        priceTrend.bullish &&
+        bullishRegime &&
+        stochRsi.probableBuy
+      : midTermScore >= 70 &&
+        bullishCount > 0 &&
+        strongCount >= Math.max(1, enabledCount - 1)
   ) {
     midTermAction = 'BUY';
     midTermExplanationKey = 'timeframe.mid.buyReady';
   } else if (
-    midTermScore >= 35 &&
-    (buy.midTerm || priceTrend.bullish) &&
-    stochRsi.probableBuy
+    usingFullComposite
+      ? midTermScore >= 35 &&
+        (buy.midTerm || priceTrend.bullish) &&
+        stochRsi.probableBuy
+      : midTermScore >= 35 &&
+        bullishCount > 0 &&
+        bearishCount === 0
   ) {
     midTermAction = 'PROBABLE_BUY';
     midTermExplanationKey = 'timeframe.mid.probableBuy';
   } else if (midTermScore >= 20) {
     midTermAction = 'HOLD';
-    midTermExplanationKey = 'timeframe.mid.hold';
+    midTermExplanationKey = liquidityTrendIntact
+      ? 'timeframe.mid.holdTrendIntact'
+      : liquidityTrendWeakening
+        ? 'timeframe.mid.holdPullback'
+        : 'timeframe.mid.hold';
+  }
+
+  if (
+    midTermAction === 'CAUTION' &&
+    liquidityTrendIntegrity.canUsePullbacks &&
+    !stochRsi.confirmedSell &&
+    !liquidityTrendInvalidated &&
+    !severeTrendDeterioration
+  ) {
+    midTermAction = 'HOLD';
+    midTermExplanationKey = 'timeframe.mid.holdPullback';
   }
 
   const longTermScore = clampScore(
-    (buy.longTerm ? 30 : 0) +
-      (priceTrend.closeAboveLongMa ? 25 : 0) +
-      (priceTrend.midAboveLongMa ? 20 : 0) +
-      (bullishRegime ? 20 : 0) +
+    (components.liquidity && buy.longTerm ? 30 : 0) +
+      (components.priceTrend && priceTrend.closeAboveLongMa ? 25 : 0) +
+      (components.priceTrend && priceTrend.midAboveLongMa ? 20 : 0) +
+      (components.liquidity && bullishRegime ? 20 : 0) +
+      (components.liquidity && liquidityTrendIntact ? 12 : 0) +
+      (components.liquidity && liquidityTrendWeakening ? 5 : 0) +
       (adxBullish ? 10 : 0) +
-      (stochRsi.probableBuy ? 5 : 0) +
-      (buy.midTerm ? 5 : 0) -
-      (stochRsi.confirmedSell
-        ? 25
+      (components.stochRsi && stochRsi.probableBuy ? 5 : 0) +
+      (components.liquidity && buy.midTerm ? 5 : 0) +
+      (strongResilientTrend ? 15 : resilientTrend ? 8 : 0) -
+      (components.stochRsi
+        ? stochRsi.confirmedSell
+        ? 10
         : stochRsi.riskSell
-          ? 15
-          : 0) -
-      (priceTrend.bearish ? 35 : 0) -
-      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
-      (highAtr ? 10 : 0)
+          ? 5
+          : stochWarning
+            ? strongResilientTrend
+              ? 0
+              : 2
+          : 0
+        : 0) -
+      (components.priceTrend && priceTrend.bearish ? 35 : 0) -
+      (components.liquidity && regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
+      (components.liquidity && liquidityTrendInvalidated ? 25 : 0) -
+      (highAtr ? 5 : 0)
   );
 
   let longTermAction: TimeframeAction = 'WAIT';
   let longTermExplanationKey = 'timeframe.long.wait';
 
-  if (regime === 'BEARISH_LIQUIDITY' && priceTrend.bearish && sell.longTerm) {
+  if (
+    components.liquidity &&
+    liquidityTrendInvalidated &&
+    (!components.priceTrend || priceTrend.bearish) &&
+    sell.longTerm
+  ) {
     longTermAction = 'EXIT';
     longTermExplanationKey = 'timeframe.long.exitBearish';
-  } else if (priceTrend.bearish || sell.longTerm) {
+  } else if (liquidityTrendInvalidated || severeTrendDeterioration || sell.longTerm) {
     longTermAction = 'REDUCE';
     longTermExplanationKey = 'timeframe.long.reduce';
-  } else if (stochRsi.confirmedSell || regime === 'SHORT_TERM_WARNING') {
+  } else if (
+    (components.stochRsi && stochRsi.confirmedSell) ||
+    (components.stochRsi &&
+      stochRsi.riskSell &&
+      (liquidityTrendInvalidated || severeTrendDeterioration))
+  ) {
     longTermAction = 'CAUTION';
     longTermExplanationKey = 'timeframe.long.caution';
   } else if (
-    longTermScore >= 75 &&
-    buy.longTerm &&
-    priceTrend.bullish &&
-    bullishRegime &&
-    stochRsi.probableBuy
+    usingFullComposite
+      ? longTermScore >= 75 &&
+        buy.longTerm &&
+        priceTrend.bullish &&
+        bullishRegime &&
+        stochRsi.probableBuy
+      : longTermScore >= 75 &&
+        strongCount >= Math.max(1, enabledCount - 1)
   ) {
     longTermAction = 'BUY';
     longTermExplanationKey = 'timeframe.long.buyReady';
   } else if (
-    longTermScore >= 45 &&
-    buy.longTerm &&
-    priceTrend.bullish &&
-    stochRsi.probableBuy
+    usingFullComposite
+      ? longTermScore >= 45 &&
+        buy.longTerm &&
+        priceTrend.bullish &&
+        stochRsi.probableBuy
+      : longTermScore >= 45 &&
+        bullishCount > 0 &&
+        bearishCount === 0
   ) {
     longTermAction = 'PROBABLE_BUY';
     longTermExplanationKey = 'timeframe.long.probableBuy';
   } else if (longTermScore >= 20) {
     longTermAction = 'HOLD';
-    longTermExplanationKey = 'timeframe.long.hold';
+    longTermExplanationKey = liquidityTrendIntact
+      ? 'timeframe.long.holdTrendIntact'
+      : liquidityTrendWeakening
+        ? 'timeframe.long.holdPullback'
+        : 'timeframe.long.hold';
   }
 
+  if (
+    longTermAction === 'CAUTION' &&
+    liquidityTrendIntegrity.canUsePullbacks &&
+    !stochRsi.confirmedSell &&
+    !liquidityTrendInvalidated &&
+    !severeTrendDeterioration
+  ) {
+    longTermAction = 'HOLD';
+    longTermExplanationKey = 'timeframe.long.holdPullback';
+  }
+
+  const shortTermPlaceholder = buildTimeframeComposite(
+    0,
+    'WAIT',
+    'timeframe.short.disabled'
+  );
+
   return {
-    shortTerm: buildTimeframeComposite(
-      shortTermScore,
-      shortTermAction,
-      shortTermExplanationKey
-    ),
+    shortTerm: shortTermPlaceholder,
     midTerm: buildTimeframeComposite(
       midTermScore,
       midTermAction,
@@ -835,6 +1191,7 @@ const buildPresentationSignals = (
   sell: SellTimeframes,
   stochRsi: StochRsiAnalysis,
   priceTrend: PriceTrendAnalysis,
+  trendResilience: TrendResilienceAnalysis,
   adx: AdxAnalysis,
   atr: AtrAnalysis,
   composite: CompositeSignal,
@@ -999,6 +1356,31 @@ const buildPresentationSignals = (
         describeLabel('هشدار روند قیمت', 'عادی')
       )
     },
+    trendResilience: {
+      ...trendResilience,
+      status: labeledValue(
+        trendResilience.status,
+        describeLabel(
+          'Trend Resilience Status',
+          trendResilience.status === 'OK' ? 'Ready' : 'Insufficient data'
+        )
+      ),
+      resilient: labeledBoolean(
+        trendResilience.resilient,
+        describeLabel('Trend Resilience', 'Active'),
+        describeLabel('Trend Resilience', 'Inactive')
+      ),
+      strongResilient: labeledBoolean(
+        trendResilience.strongResilient,
+        describeLabel('Strong Trend Resilience', 'Active'),
+        describeLabel('Strong Trend Resilience', 'Inactive')
+      ),
+      fragile: labeledBoolean(
+        trendResilience.fragile,
+        describeLabel('Trend Fragility', 'Active'),
+        describeLabel('Trend Fragility', 'Inactive')
+      )
+    },
     adx: {
       ...adx,
       status: labeledValue(
@@ -1076,60 +1458,143 @@ export const calculateCompositeSignal = (
   sell: SellTimeframes,
   stochRsi: StochRsiAnalysis,
   priceTrend: PriceTrendAnalysis,
+  liquidityTrendIntegrity: LiquidityTrendIntegrity,
   adx?: AdxAnalysis,
   atr?: AtrAnalysis,
-  liquidityConfirmation?: LiquidityConfirmation
+  liquidityConfirmation?: LiquidityConfirmation,
+  components?: AnalysisComponentState,
+  trendResilience?: TrendResilienceAnalysis
 ): CompositeSignal => {
-  const activeSellSignal = stochRsi.riskSell || stochRsi.confirmedSell;
-  const bullishRegime =
-    regime === 'STRONG_BULLISH_LIQUIDITY' ||
-    regime === 'EARLY_BULLISH' ||
-    regime === 'CONFIRMED_BULLISH';
-  const liquidityRegimeIsBullishOrNeutral =
-    bullishRegime || regime === 'NEUTRAL';
-  const confirmedSell =
-    stochRsi.confirmedSell &&
-    (priceTrend.bearish ||
-      regime === 'SHORT_TERM_WARNING' ||
-      regime === 'BEARISH_LIQUIDITY' ||
-      !buy.midTerm);
-  const confirmedSellButTrendStrong =
-    stochRsi.confirmedSell &&
-    regime === 'STRONG_BULLISH_LIQUIDITY' &&
-    buy.midTerm &&
-    !priceTrend.bearish;
-  const riskSell = stochRsi.riskSell && (!buy.shortTerm || priceTrend.warning);
-  const caution =
-    stochRsi.riskSell || regime === 'SHORT_TERM_WARNING' || priceTrend.warning;
-  const strongBuy =
-    stochRsi.probableBuy &&
-    buy.shortTerm &&
-    buy.midTerm &&
-    priceTrend.bullish &&
-    regime !== 'BEARISH_LIQUIDITY' &&
+  const activeComponents = components ?? {
+    liquidity: true,
+    stochRsi: true,
+    priceTrend: true,
+    adx: true,
+    atr: true
+  };
+  const activeTrendResilience =
+    trendResilience ?? calculateTrendResilience(priceTrend);
+  const { enabledCount, bullishCount, strongCount, bearishCount, bullishRegime } =
+    getCoreSignalVotes({
+      regime,
+      buy,
+      stochRsi,
+      priceTrend,
+      trendResilience: activeTrendResilience,
+      liquidityTrendIntegrity,
+      components: activeComponents
+    });
+  const usingFullComposite =
+    activeComponents.liquidity &&
+    activeComponents.stochRsi &&
+    activeComponents.priceTrend;
+  const stochWarning =
+    activeComponents.stochRsi &&
+    stochRsi.crossDownInRed &&
     !stochRsi.riskSell &&
     !stochRsi.confirmedSell;
-  const probableBuy =
-    stochRsi.probableBuy &&
-    regime !== 'BEARISH_LIQUIDITY' &&
-    !stochRsi.confirmedSell &&
-    (buy.shortTerm ||
-      regime === 'EARLY_BULLISH' ||
-      regime === 'CONFIRMED_BULLISH' ||
-      priceTrend.direction === 'IMPROVING');
-  const hold =
-    liquidityRegimeIsBullishOrNeutral &&
-    !activeSellSignal &&
-    !stochRsi.probableBuy;
-  const adxWeak = adx?.trendStrength === 'WEAK';
+  const resilientTrend =
+    activeComponents.priceTrend &&
+    activeTrendResilience.status === 'OK' &&
+    activeTrendResilience.resilient;
+  const strongResilientTrend =
+    activeComponents.priceTrend &&
+    activeTrendResilience.status === 'OK' &&
+    activeTrendResilience.strongResilient;
+  const liquidityTrendIntact = liquidityTrendIntegrity.status === 'INTACT';
+  const liquidityTrendWeakening = liquidityTrendIntegrity.status === 'WEAKENING';
+  const liquidityTrendInvalidated =
+    liquidityTrendIntegrity.status === 'INVALIDATED';
+  const trendDeteriorating =
+    activeComponents.priceTrend &&
+    priceTrend.bearish &&
+    !resilientTrend;
+  const severeTrendDeterioration =
+    trendDeteriorating &&
+    (!activeComponents.liquidity ||
+      liquidityTrendInvalidated ||
+      !buy.midTerm);
+  const liquidityRegimeIsBullishOrNeutral =
+    !activeComponents.liquidity ||
+    liquidityTrendIntegrity.canFollowBullishTrend ||
+    bullishRegime ||
+    regime === 'NEUTRAL';
+  const activeSellSignal =
+    (activeComponents.stochRsi && (stochRsi.riskSell || stochRsi.confirmedSell)) ||
+    severeTrendDeterioration;
+  const confirmedSell =
+    activeComponents.stochRsi &&
+    stochRsi.confirmedSell &&
+    (!activeComponents.priceTrend || priceTrend.bearish || priceTrend.warning) &&
+    (!activeComponents.liquidity ||
+      liquidityTrendInvalidated ||
+      !buy.midTerm);
+  const confirmedSellButTrendStrong =
+    activeComponents.stochRsi &&
+    stochRsi.confirmedSell &&
+    activeComponents.liquidity &&
+    regime === 'STRONG_BULLISH_LIQUIDITY' &&
+    buy.midTerm &&
+    (!activeComponents.priceTrend || !priceTrend.bearish);
+  const riskSell =
+    usingFullComposite
+      ? activeComponents.stochRsi &&
+        stochRsi.riskSell &&
+        (liquidityTrendInvalidated ||
+          (severeTrendDeterioration &&
+            (!liquidityTrendIntegrity.canUsePullbacks || !buy.midTerm)))
+      : (activeComponents.stochRsi && stochRsi.riskSell) ||
+        (activeComponents.priceTrend && priceTrend.warning);
+  const caution =
+    usingFullComposite
+      ? confirmedSellButTrendStrong ||
+        riskSell ||
+        liquidityTrendInvalidated
+      : bearishCount > 0 || riskSell || (stochWarning && !strongResilientTrend);
+  const strongBuy = usingFullComposite
+    ? stochRsi.probableBuy &&
+      buy.midTerm &&
+      buy.longTerm &&
+      priceTrend.bullish &&
+      !liquidityTrendInvalidated &&
+      !stochRsi.riskSell &&
+      !stochRsi.confirmedSell
+    : enabledCount > 0 &&
+      strongCount === enabledCount &&
+      !riskSell &&
+      !confirmedSell;
+  const probableBuy = usingFullComposite
+      ? stochRsi.probableBuy &&
+      liquidityTrendIntegrity.canFollowBullishTrend &&
+      !stochRsi.confirmedSell &&
+      (buy.midTerm ||
+        regime === 'CONFIRMED_BULLISH' ||
+        priceTrend.direction === 'IMPROVING')
+    : bullishCount > 0 &&
+      bearishCount === 0 &&
+      !confirmedSell &&
+      (!activeComponents.liquidity || regime !== 'BEARISH_LIQUIDITY');
+  const hold = usingFullComposite
+    ? liquidityRegimeIsBullishOrNeutral &&
+      !activeSellSignal &&
+      !caution &&
+      !stochRsi.probableBuy
+    : liquidityRegimeIsBullishOrNeutral &&
+      !activeSellSignal &&
+      bullishCount === 0;
+  const adxWeak = activeComponents.adx && adx?.trendStrength === 'WEAK';
   const adxStrongBullish =
-    adx?.trendStrength === 'STRONG' && adx.bullishDirectionalBias;
+    activeComponents.adx &&
+    adx?.trendStrength === 'STRONG' &&
+    adx.bullishDirectionalBias;
   const adxStrongBearish =
-    adx?.trendStrength === 'STRONG' && adx.bearishDirectionalBias;
-  const highAtr = atr?.volatilityRegime === 'HIGH';
+    activeComponents.adx &&
+    adx?.trendStrength === 'STRONG' &&
+    adx.bearishDirectionalBias;
+  const highAtr = activeComponents.atr && atr?.volatilityRegime === 'HIGH';
 
-  let action: CompositeSignal['action'] = 'CAUTION';
-  let explanationKey = 'composite.caution';
+  let action: CompositeSignal['action'] = usingFullComposite ? 'HOLD' : 'CAUTION';
+  let explanationKey = usingFullComposite ? 'composite.hold' : 'composite.caution';
 
   if (confirmedSell) {
     action = 'CONFIRMED_SELL';
@@ -1140,9 +1605,6 @@ export const calculateCompositeSignal = (
   } else if (riskSell) {
     action = 'RISK_SELL';
     explanationKey = 'composite.riskSell';
-  } else if (caution) {
-    action = 'CAUTION';
-    explanationKey = 'composite.caution';
   } else if (strongBuy) {
     action = 'STRONG_BUY';
     explanationKey = 'composite.strongBuy';
@@ -1152,6 +1614,9 @@ export const calculateCompositeSignal = (
   } else if (hold) {
     action = 'HOLD';
     explanationKey = 'composite.hold';
+  } else if (caution) {
+    action = 'CAUTION';
+    explanationKey = 'composite.caution';
   }
 
   if (action === 'STRONG_BUY' && (adxWeak || highAtr || adxStrongBearish)) {
@@ -1169,29 +1634,60 @@ export const calculateCompositeSignal = (
     explanationKey = 'composite.caution';
   }
 
+  if (
+    usingFullComposite &&
+    action === 'CAUTION' &&
+    liquidityTrendIntegrity.canUsePullbacks &&
+    !liquidityTrendInvalidated &&
+    !stochRsi.confirmedSell &&
+    !riskSell &&
+    !severeTrendDeterioration
+  ) {
+    action = 'HOLD';
+    explanationKey = 'composite.hold';
+  }
+
   const stochPenalty = stochRsi.confirmedSell
-    ? -50
-    : stochRsi.riskSell
+    ? activeComponents.stochRsi
+      ? -50
+      : 0
+    : stochRsi.riskSell && activeComponents.stochRsi
       ? -25
+      : stochWarning && activeComponents.stochRsi
+        ? strongResilientTrend
+          ? -3
+          : -8
       : 0;
   const score = clampScore(
-    (buy.shortTerm ? 20 : 0) +
-      (buy.midTerm ? 25 : 0) +
-      (buy.longTerm ? 15 : 0) +
-      (stochRsi.probableBuy ? 20 : 0) +
-      (priceTrend.direction === 'BULLISH' ? 20 : 0) +
-      (priceTrend.direction === 'IMPROVING' ? 10 : 0) +
+    (activeComponents.liquidity && buy.midTerm ? 30 : 0) +
+      (activeComponents.liquidity && buy.longTerm ? 25 : 0) +
+      (activeComponents.stochRsi && stochRsi.probableBuy ? 10 : 0) +
+      (activeComponents.liquidity && liquidityTrendIntact ? 12 : 0) +
+      (activeComponents.liquidity && liquidityTrendWeakening ? 5 : 0) +
+      (strongResilientTrend ? 15 : resilientTrend ? 8 : 0) +
+      (activeComponents.priceTrend && priceTrend.direction === 'BULLISH' ? 20 : 0) +
+      (activeComponents.priceTrend && priceTrend.direction === 'IMPROVING'
+        ? 10
+        : 0) +
       (adxWeak ? -10 : 0) +
       (adxStrongBullish ? 5 : 0) +
       (adxStrongBearish ? -10 : 0) +
       (highAtr ? -10 : 0) +
-      (liquidityConfirmation?.liquidityExpansion ? 5 : 0) +
-      (liquidityConfirmation?.liquidityContraction ? -5 : 0) +
+      (activeComponents.liquidity && liquidityConfirmation?.liquidityExpansion
+        ? 5
+        : 0) +
+      (activeComponents.liquidity && liquidityConfirmation?.liquidityContraction
+        ? -5
+        : 0) +
       stochPenalty -
-      (regime === 'SHORT_TERM_WARNING' ? 20 : 0) -
-      (regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
-      (priceTrend.direction === 'BEARISH' ? 25 : 0) -
-      (priceTrend.direction === 'WEAKENING' ? 10 : 0)
+      (activeComponents.liquidity && regime === 'BEARISH_LIQUIDITY' ? 35 : 0) -
+      (activeComponents.liquidity && liquidityTrendInvalidated ? 20 : 0) -
+      (activeComponents.priceTrend && priceTrend.direction === 'BEARISH'
+        ? 25
+        : 0) -
+      (activeComponents.priceTrend && priceTrend.direction === 'WEAKENING'
+        ? 10
+        : 0)
   );
   const timeframes = calculateTimeframeComposites({
     regime,
@@ -1199,6 +1695,8 @@ export const calculateCompositeSignal = (
     sell,
     stochRsi,
     priceTrend,
+    trendResilience: activeTrendResilience,
+    liquidityTrendIntegrity,
     adx:
       adx ??
       ({
@@ -1220,7 +1718,8 @@ export const calculateCompositeSignal = (
         latestAtrPercent: null,
         volatilityRegime: 'INSUFFICIENT_DATA'
       } satisfies AtrAnalysis),
-    ...(liquidityConfirmation ? { liquidityConfirmation } : {})
+    ...(liquidityConfirmation ? { liquidityConfirmation } : {}),
+    components: activeComponents
   });
 
   return {
@@ -1359,6 +1858,23 @@ export const analyzeSymbolMetrics = (
     values,
     env.LIQUIDITY_CONFIRMATION_WINDOW
   );
+  const liquidityTrendIntegrity = calculateLiquidityTrendIntegrity(
+    {
+      latestTradeValue,
+      maWeekly: movingAverageAnalysis.maWeekly,
+      maMonthly: movingAverageAnalysis.maMonthly,
+      maQuarterly: movingAverageAnalysis.maQuarterly,
+      weeklySlope: movingAverageAnalysis.weeklySlope,
+      monthlySlope: movingAverageAnalysis.monthlySlope,
+      quarterlySlope: movingAverageAnalysis.quarterlySlope
+    },
+    movingAverageAnalysis,
+    liquidityConfirmation
+  );
+  const componentState = buildAnalysisComponentState(params);
+  const enabledIndicators = analysisIndicatorComponents.filter(
+    (component) => componentState[component]
+  );
   const valueChangeVsMonthly =
     movingAverageAnalysis.maMonthly !== 0
       ? round(
@@ -1384,13 +1900,15 @@ export const analyzeSymbolMetrics = (
       monthlySlope: movingAverageAnalysis.monthlySlope,
       quarterlySlope: movingAverageAnalysis.quarterlySlope
     },
-    env.BUY_THRESHOLD_PERCENT
+    env.BUY_THRESHOLD_PERCENT,
+    liquidityTrendIntegrity
   );
   const stochRsi = calculateStochRsiAnalysis(sortedRows, getStochRsiConfig());
   const priceTrend = calculatePriceTrendAnalysis(
     sortedRows,
     getPriceTrendConfig()
   );
+  const trendResilience = calculateTrendResilience(priceTrend);
   const atr = calculateAtrAnalysis(
     sortedRows,
     env.ATR_PERIOD,
@@ -1398,16 +1916,25 @@ export const analyzeSymbolMetrics = (
     env.ATR_HIGH_VOLATILITY_THRESHOLD
   );
   const adx = calculateAdxAnalysis(sortedRows, env.ADX_PERIOD);
-  const sell = calculateSellTimeframes(regime, buy, stochRsi, priceTrend);
+  const sell = calculateSellTimeframes(
+    regime,
+    buy,
+    stochRsi,
+    priceTrend,
+    liquidityTrendIntegrity
+  );
   const composite = calculateCompositeSignal(
     regime,
     buy,
     sell,
     stochRsi,
     priceTrend,
+    liquidityTrendIntegrity,
     adx,
     atr,
-    liquidityConfirmation
+    liquidityConfirmation,
+    componentState,
+    trendResilience
   );
 
   return {
@@ -1435,7 +1962,13 @@ export const analyzeSymbolMetrics = (
       valueChangeVsQuarterly,
       relativeTradeValue20: liquidityConfirmation.relativeTradeValue20,
       liquidityExpansion: liquidityConfirmation.liquidityExpansion,
-      liquidityContraction: liquidityConfirmation.liquidityContraction
+      liquidityContraction: liquidityConfirmation.liquidityContraction,
+      liquidityTrendIntegrity
+    },
+    analysisProfile: {
+      indicatorMode: params.indicatorMode ?? 'composite',
+      disabledIndicators: [...(params.disabledIndicators ?? [])],
+      enabledIndicators
     },
     signals: buildPresentationSignals(
       regime,
@@ -1444,6 +1977,7 @@ export const analyzeSymbolMetrics = (
       sell,
       stochRsi,
       priceTrend,
+      trendResilience,
       adx,
       atr,
       composite,
