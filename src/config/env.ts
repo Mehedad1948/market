@@ -36,7 +36,7 @@ const envSchema = z.object({
     .regex(/^\d{2}:\d{2}$/)
     .default('12:30'),
   DEFAULT_WEEKLY_WINDOW: z.coerce.number().int().positive().default(7),
-  DEFAULT_MONTHLY_WINDOW: z.coerce.number().int().positive().default(30),
+  DEFAULT_MONTHLY_WINDOW: z.coerce.number().int().positive().default(35),
   DEFAULT_QUARTERLY_WINDOW: z.coerce.number().int().positive().default(90),
   BUY_THRESHOLD_PERCENT: z.coerce.number().positive().default(0.02),
   STOCH_RSI_RSI_LENGTH: z.coerce.number().int().positive().default(14),

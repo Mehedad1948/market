@@ -371,6 +371,34 @@ const resolveScoringOverrides = (
   ...(overrides ?? {})
 });
 
+const hasConfirmedBearishStructure = ({
+  priceTrendBearish,
+  resilientTrend,
+  liquidityTrendInvalidated,
+  liquidityCanUsePullbacks,
+  buyMidTerm,
+  mfiBearish,
+  adxStrongBearish
+}: {
+  priceTrendBearish: boolean;
+  resilientTrend: boolean;
+  liquidityTrendInvalidated: boolean;
+  liquidityCanUsePullbacks: boolean;
+  buyMidTerm: boolean;
+  mfiBearish: boolean;
+  adxStrongBearish: boolean;
+}) => {
+  if (!priceTrendBearish || resilientTrend) {
+    return false;
+  }
+
+  if (liquidityTrendInvalidated || !buyMidTerm) {
+    return true;
+  }
+
+  return !liquidityCanUsePullbacks && (mfiBearish || adxStrongBearish);
+};
+
 type AnalysisComponentState = Record<AnalysisIndicatorComponent, boolean>;
 
 const buildAnalysisComponentState = (
@@ -967,16 +995,30 @@ const calculateTimeframeComposites = ({
   const liquidityTrendWeakening = liquidityTrendIntegrity.status === 'WEAKENING';
   const liquidityTrendInvalidated =
     liquidityTrendIntegrity.status === 'INVALIDATED';
+  const adxStrongBearish = components.adx && adx.bearishDirectionalBias;
   const trendDeteriorating =
     components.priceTrend &&
-    priceTrend.bearish &&
-    !resilientTrend;
+    hasConfirmedBearishStructure({
+      priceTrendBearish: priceTrend.bearish,
+      resilientTrend,
+      liquidityTrendInvalidated,
+      liquidityCanUsePullbacks: liquidityTrendIntegrity.canUsePullbacks,
+      buyMidTerm: buy.midTerm,
+      mfiBearish,
+      adxStrongBearish
+    });
   const severeTrendDeterioration =
     trendDeteriorating &&
     (!components.liquidity || liquidityTrendInvalidated || !buy.midTerm);
   const adxBullish = components.adx && adx.bullishDirectionalBias;
-  const adxBearish = components.adx && adx.bearishDirectionalBias;
+  const adxBearish = adxStrongBearish;
   const highAtr = components.atr && atr.volatilityRegime === 'HIGH';
+  const midTermBearishPricePenalty =
+    components.priceTrend && priceTrend.bearish
+      ? severeTrendDeterioration
+        ? 25 * weights.priceTrendWeight
+        : 10 * weights.priceTrendWeight
+      : 0;
   const coreBullishWeight = bullishCount * 30 + strongCount * 15;
   const coreBearishWeight = bearishCount * 25;
 
@@ -1020,9 +1062,7 @@ const calculateTimeframeComposites = ({
               : 4 * weights.stochRsiWeight
           : 0
         : 0) -
-      (components.priceTrend && priceTrend.bearish
-        ? 25 * weights.priceTrendWeight
-        : 0) -
+      midTermBearishPricePenalty -
       (components.liquidity && regime === 'BEARISH_LIQUIDITY'
         ? 35 * weights.liquidityWeight
         : 0) -
@@ -1137,7 +1177,9 @@ const calculateTimeframeComposites = ({
           : 0
         : 0) -
       (components.priceTrend && priceTrend.bearish
-        ? 35 * weights.priceTrendWeight
+        ? severeTrendDeterioration
+          ? 35 * weights.priceTrendWeight
+          : 14 * weights.priceTrendWeight
         : 0) -
       (components.liquidity && regime === 'BEARISH_LIQUIDITY'
         ? 35 * weights.liquidityWeight
@@ -1675,10 +1717,21 @@ export const calculateCompositeSignal = (
   const liquidityTrendWeakening = liquidityTrendIntegrity.status === 'WEAKENING';
   const liquidityTrendInvalidated =
     liquidityTrendIntegrity.status === 'INVALIDATED';
+  const adxStrongBearish =
+    activeComponents.adx &&
+    adx?.trendStrength === 'STRONG' &&
+    adx.bearishDirectionalBias;
   const trendDeteriorating =
     activeComponents.priceTrend &&
-    priceTrend.bearish &&
-    !resilientTrend;
+    hasConfirmedBearishStructure({
+      priceTrendBearish: priceTrend.bearish,
+      resilientTrend,
+      liquidityTrendInvalidated,
+      liquidityCanUsePullbacks: liquidityTrendIntegrity.canUsePullbacks,
+      buyMidTerm: buy.midTerm,
+      mfiBearish,
+      adxStrongBearish
+    });
   const severeTrendDeterioration =
     trendDeteriorating &&
     (!activeComponents.liquidity ||
@@ -1759,11 +1812,19 @@ export const calculateCompositeSignal = (
     activeComponents.adx &&
     adx?.trendStrength === 'STRONG' &&
     adx.bullishDirectionalBias;
-  const adxStrongBearish =
-    activeComponents.adx &&
-    adx?.trendStrength === 'STRONG' &&
-    adx.bearishDirectionalBias;
   const highAtr = activeComponents.atr && atr?.volatilityRegime === 'HIGH';
+  const bearishPricePenalty =
+    activeComponents.priceTrend && priceTrend.direction === 'BEARISH'
+      ? severeTrendDeterioration
+        ? 25 * weights.priceTrendWeight
+        : 10 * weights.priceTrendWeight
+      : 0;
+  const weakeningPricePenalty =
+    activeComponents.priceTrend && priceTrend.direction === 'WEAKENING'
+      ? severeTrendDeterioration || liquidityTrendInvalidated
+        ? 10 * weights.priceTrendWeight
+        : 4 * weights.priceTrendWeight
+      : 0;
 
   let action: CompositeSignal['action'] = usingFullComposite ? 'HOLD' : 'CAUTION';
   let explanationKey = usingFullComposite ? 'composite.hold' : 'composite.caution';
@@ -1874,12 +1935,8 @@ export const calculateCompositeSignal = (
         ? 20 * weights.liquidityWeight
         : 0) -
       (mfiBearish ? 12 * weights.mfiWeight : 0) -
-      (activeComponents.priceTrend && priceTrend.direction === 'BEARISH'
-        ? 25 * weights.priceTrendWeight
-        : 0) -
-      (activeComponents.priceTrend && priceTrend.direction === 'WEAKENING'
-        ? 10 * weights.priceTrendWeight
-        : 0)
+      bearishPricePenalty -
+      weakeningPricePenalty
   );
   const timeframes = calculateTimeframeComposites({
     regime,

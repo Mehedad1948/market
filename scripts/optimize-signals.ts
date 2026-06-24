@@ -782,6 +782,22 @@ const buildWeightNeighborConfigs = (
   ];
 };
 
+const interleaveCandidates = <T>(groups: T[][]): T[] => {
+  const result: T[] = [];
+  const maxLength = Math.max(0, ...groups.map((group) => group.length));
+
+  for (let index = 0; index < maxLength; index += 1) {
+    for (const group of groups) {
+      const candidate = group[index];
+      if (candidate !== undefined) {
+        result.push(candidate);
+      }
+    }
+  }
+
+  return result;
+};
+
 const writeArtifact = async (artifact: OptimizationArtifact) => {
   const reportsDir = path.join(process.cwd(), 'reports');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -870,7 +886,10 @@ const main = async () => {
             quarterlyWindow: candidate.quarterlyWindow,
             scoringOverrides: candidate.scoringOverrides
           }));
-    const candidates = [...windowCandidates, ...weightCandidates];
+    const candidates =
+      args.sweepMode === 'combined'
+        ? interleaveCandidates([windowCandidates, weightCandidates])
+        : [...windowCandidates, ...weightCandidates];
 
     const newCandidates = candidates
       .filter((candidate) => !seenConfigs.has(configKey(candidate)))
