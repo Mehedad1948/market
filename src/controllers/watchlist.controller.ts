@@ -1,13 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
-import { z } from 'zod';
 
+import { watchlistBodySchema } from '../contracts/watchlist.contract';
 import { requireAuthenticatedUser } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { watchlistService } from '../services/watchlist.service';
-
-const watchlistBodySchema = z.object({
-  symbol: z.string().trim().min(1)
-});
 
 const getRouteSymbol = (value: string | string[] | undefined) => {
   if (Array.isArray(value)) {

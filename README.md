@@ -158,6 +158,18 @@ Provider login flows are not implemented yet. The current foundation is limited 
 
 Sample local requests are available in [requests/localhost.http](/D:/projects/market/requests/localhost.http).
 
+Frontend integration artifacts for the new watchlist and alert endpoints are generated into:
+
+- [docs/frontend-api.md](/D:/projects/market/docs/frontend-api.md)
+- [docs/frontend-api.types.ts](/D:/projects/market/docs/frontend-api.types.ts)
+- [docs/openapi.frontend.json](/D:/projects/market/docs/openapi.frontend.json)
+
+Regenerate them after changing those endpoint contracts with:
+
+```bash
+npm run docs:frontend-api
+```
+
 ### Health
 
 ```bash

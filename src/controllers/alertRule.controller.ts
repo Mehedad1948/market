@@ -1,21 +1,9 @@
-import { AlertRuleScope, AlertRuleType, WatchlistChangeEvent } from '@prisma/client';
 import type { NextFunction, Request, Response } from 'express';
-import { z } from 'zod';
 
+import { createAlertRuleBodySchema } from '../contracts/alertRule.contract';
 import { requireAuthenticatedUser } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { alertRuleService } from '../services/alertRule.service';
-
-const createAlertRuleBodySchema = z.object({
-  type: z.nativeEnum(AlertRuleType),
-  scope: z.nativeEnum(AlertRuleScope).optional(),
-  symbol: z.string().trim().min(1).optional().nullable(),
-  signalAction: z.string().trim().min(1).optional().nullable(),
-  minScore: z.number().int().optional().nullable(),
-  watchlistChangeEvent: z.nativeEnum(WatchlistChangeEvent).optional().nullable(),
-  enabled: z.boolean().optional(),
-  cooldownMinutes: z.number().int().min(0).max(10080).optional()
-});
 
 const getRouteId = (value: string | string[] | undefined) => {
   if (Array.isArray(value)) {
