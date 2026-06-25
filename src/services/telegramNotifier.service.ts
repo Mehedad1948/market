@@ -34,12 +34,15 @@ const buildMessage = (title: string, details?: Record<string, unknown>) => {
   );
 };
 
-export const notifFunction = async (message: string): Promise<boolean> => {
-  if (!env.BALE_BOT_TOKEN.trim() || !env.BALE_BOT_CHAT_ID.trim()) {
+const sendMessage = async (
+  message: string,
+  chatId: string | null | undefined
+): Promise<boolean> => {
+  if (!env.BALE_BOT_TOKEN.trim() || !chatId?.trim()) {
     logger.warn(
       {
         baleBotTokenConfigured: Boolean(env.BALE_BOT_TOKEN),
-        baleBotChatIdConfigured: Boolean(env.BALE_BOT_CHAT_ID)
+        baleBotChatIdConfigured: Boolean(chatId)
       },
       'Bale notifier skipped because it is not fully configured'
     );
@@ -51,7 +54,7 @@ export const notifFunction = async (message: string): Promise<boolean> => {
     await axios.post(
       `${BALE_BOT_API_BASE_URL}/bot${env.BALE_BOT_TOKEN}/sendMessage`,
       {
-        chat_id: env.BALE_BOT_CHAT_ID,
+        chat_id: chatId,
         text: message
       },
       {
@@ -65,7 +68,7 @@ export const notifFunction = async (message: string): Promise<boolean> => {
       {
         err: error,
         endpoint: `${BALE_BOT_API_BASE_URL}/bot${maskSecret(env.BALE_BOT_TOKEN)}/sendMessage`,
-        baleBotChatIdConfigured: Boolean(env.BALE_BOT_CHAT_ID),
+        baleBotChatIdConfigured: Boolean(chatId),
         messagePreview: message.slice(0, 200)
       },
       'Bale notification request failed'
@@ -81,6 +84,14 @@ export const telegramNotifier = {
   },
 
   async send(title: string, details?: Record<string, unknown>) {
-    return notifFunction(buildMessage(title, details));
+    return sendMessage(buildMessage(title, details), env.BALE_BOT_CHAT_ID);
+  },
+
+  async sendToChat(
+    chatId: string,
+    title: string,
+    details?: Record<string, unknown>
+  ) {
+    return sendMessage(buildMessage(title, details), chatId);
   }
 };

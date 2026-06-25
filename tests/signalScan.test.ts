@@ -6,14 +6,18 @@ const {
   getActiveCache,
   saveCache,
   analyzeSymbolMetrics,
-  refreshSymbolHistory
+  refreshSymbolHistory,
+  processSignalScanSummary,
+  sendNotification
 } = vi.hoisted(() => ({
   getTrackedSymbols: vi.fn(),
   getSymbolHistory: vi.fn(),
   getActiveCache: vi.fn(),
   saveCache: vi.fn(),
   analyzeSymbolMetrics: vi.fn(),
-  refreshSymbolHistory: vi.fn()
+  refreshSymbolHistory: vi.fn(),
+  processSignalScanSummary: vi.fn(),
+  sendNotification: vi.fn()
 }));
 
 vi.mock('../src/repositories/symbol.repository', () => ({
@@ -42,6 +46,18 @@ vi.mock('../src/services/symbolData.service', () => ({
   }
 }));
 
+vi.mock('../src/services/alertRule.service', () => ({
+  alertRuleService: {
+    processSignalScanSummary
+  }
+}));
+
+vi.mock('../src/services/telegramNotifier.service', () => ({
+  telegramNotifier: {
+    send: sendNotification
+  }
+}));
+
 import {
   ScanAlreadyRunningError,
   signalScanService
@@ -59,6 +75,12 @@ describe('signalScan.service', () => {
     ]);
     saveCache.mockResolvedValue({});
     refreshSymbolHistory.mockResolvedValue({});
+    processSignalScanSummary.mockResolvedValue({
+      matchedRuleCount: 0,
+      sentCount: 0,
+      deduplicatedCount: 0
+    });
+    sendNotification.mockResolvedValue(true);
   });
 
   afterEach(() => {

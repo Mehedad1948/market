@@ -11,6 +11,9 @@ import { discountCodeRouter } from './routes/discountCode.routes';
 import { notificationRouter } from './routes/notification.routes';
 import { symbolCatalogRouter } from './routes/symbolCatalog.routes';
 import { stockRouter } from './routes/stock.routes';
+import { watchlistRouter } from './routes/watchlist.routes';
+import { alertRuleRouter } from './routes/alertRule.routes';
+import { portfolioRouter } from './routes/portfolio.routes';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { rateLimit } from './middleware/rateLimit';
@@ -56,6 +59,9 @@ export const createApp = () => {
   app.use('/api/notifications', notificationRouter);
   app.use('/api/symbols', symbolCatalogRouter);
   app.use('/api/stocks', stockRouter);
+  app.use('/api/watchlist', watchlistRouter);
+  app.use('/api/alerts', alertRuleRouter);
+  app.use('/api/portfolios', portfolioRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

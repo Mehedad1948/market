@@ -6,6 +6,7 @@ import { analysisCacheRepository } from '../repositories/analysisCache.repositor
 import { symbolRepository } from '../repositories/symbol.repository';
 import type { StockAnalysisResult, SymbolAnalysisParams } from '../types';
 import { telegramNotifier } from './telegramNotifier.service';
+import { alertRuleService } from './alertRule.service';
 import {
   InsufficientDataError,
   analyzeSymbolMetrics,
@@ -493,6 +494,10 @@ export const signalScanService = {
           okCount: summary.okCount,
           insufficientDataCount: summary.insufficientDataCount,
           errorCount: summary.errorCount
+        });
+
+        void alertRuleService.processSignalScanSummary(summary).catch((error) => {
+          logger.error({ err: error, scannedAt: summary.scannedAt }, 'Signal scan alert delivery failed');
         });
 
         return summary;
