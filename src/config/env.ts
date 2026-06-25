@@ -82,6 +82,7 @@ const envSchema = z.object({
     .int()
     .nonnegative()
     .default(30000),
+  INTERNAL_API_TOKEN: z.string().default(''),
   BALE_BOT_TOKEN: z.string().default(''),
   BALE_BOT_CHAT_ID: z.string().default(''),
   COMPOSITE_SCORING_VERSION: z.coerce.number().int().positive().default(3),

@@ -339,4 +339,86 @@ describe('auth.service', () => {
     expect(result.isNewAuthAccount).toBe(true);
     expect(result.user?.id).toBe('user-existing');
   });
+
+  it('reuses an existing Bale auth account without creating a duplicate user', async () => {
+    repositoryMocks.findAuthAccountByProviderAccount.mockResolvedValue({
+      id: 'auth-existing',
+      userId: 'user-1',
+      provider: 'BALE',
+      providerAccountId: '42'
+    });
+    repositoryMocks.findById.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Existing Bale User',
+      firstName: 'Existing',
+      lastName: 'User',
+      email: 'bale@example.com',
+      phone: null,
+      avatarUrl: null,
+      telegramUserId: '42',
+      telegramUsername: 'existing-user',
+      isActive: true,
+      trialUsed: false,
+      lastLoginAt: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.findByEmail.mockResolvedValue(null);
+    repositoryMocks.findByPhone.mockResolvedValue(null);
+    repositoryMocks.findByTelegramUserId.mockResolvedValue(null);
+    repositoryMocks.updateUser.mockResolvedValue({
+      id: 'user-1',
+      displayName: 'Existing Bale User',
+      firstName: 'Existing',
+      lastName: 'User',
+      email: 'bale@example.com',
+      phone: null,
+      avatarUrl: null,
+      telegramUserId: '42',
+      telegramUsername: 'existing-user',
+      isActive: true,
+      trialUsed: false,
+      lastLoginAt: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.upsertAuthAccountByProviderAccount.mockResolvedValue({
+      id: 'auth-existing',
+      userId: 'user-1',
+      provider: 'BALE',
+      providerAccountId: '42'
+    });
+    repositoryMocks.createSession.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      tokenHash: 'stored-hash',
+      expiresAt: new Date('2026-07-20T00:00:00.000Z'),
+      revokedAt: null,
+      ip: null,
+      userAgent: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.updateLastLogin.mockResolvedValue(null);
+
+    const result = await authService.authenticateWithBale({
+      baleUser: {
+        id: '42',
+        username: 'existing-user'
+      },
+      email: 'bale@example.com'
+    });
+
+    expect(repositoryMocks.createUser).not.toHaveBeenCalled();
+    expect(repositoryMocks.updateUser).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        telegramUserId: '42',
+        telegramUsername: 'existing-user'
+      })
+    );
+    expect(result.isNewUser).toBe(false);
+    expect(result.isNewAuthAccount).toBe(false);
+    expect(result.user?.id).toBe('user-1');
+  });
 });

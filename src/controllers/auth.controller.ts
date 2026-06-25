@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { AppError } from '../middleware/errorHandler';
 import { requireAuthenticatedUser } from '../middleware/auth';
 import { authService } from '../services/auth.service';
+import { subscriptionService } from '../services/subscription.service';
 
 const baleCallbackBodySchema = z.object({
   baleUser: z.object({
@@ -148,6 +149,42 @@ export const logoutCurrentSession = async (
     response.json({
       status: 'OK',
       loggedOut: true
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCurrentSubscription = async (
+  request: Request,
+  response: Response,
+  next: NextFunction
+) => {
+  try {
+    const user = requireAuthenticatedUser(request);
+    const access = await subscriptionService.resolveAccessForUser(user.id);
+
+    response.json({
+      status: 'OK',
+      access
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const activateTrialSubscription = async (
+  request: Request,
+  response: Response,
+  next: NextFunction
+) => {
+  try {
+    const user = requireAuthenticatedUser(request);
+    const access = await subscriptionService.activateTrial(user.id);
+
+    response.status(201).json({
+      status: 'OK',
+      access
     });
   } catch (error) {
     next(error);

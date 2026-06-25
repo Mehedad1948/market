@@ -1,13 +1,18 @@
 import { PrismaClient } from '@prisma/client';
 
+import {
+  TRIAL_DURATION_DAYS,
+  TRIAL_PLAN_CODE
+} from '../src/services/subscription.constants';
+
 const prisma = new PrismaClient();
 
 const plans = [
   {
-    code: 'trial-14d',
+    code: TRIAL_PLAN_CODE,
     name: '14-Day Trial',
     description: 'Trial access for new users.',
-    durationDays: 14,
+    durationDays: TRIAL_DURATION_DAYS,
     priceAmount: '0',
     currency: 'IRR',
     isTrial: true,

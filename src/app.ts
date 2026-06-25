@@ -6,6 +6,8 @@ import { logger } from './lib/logger';
 import { healthRouter } from './routes/health.routes';
 import { rootRouter } from './routes/root.routes';
 import { authRouter } from './routes/auth.routes';
+import { adminDiscountCodeRouter } from './routes/adminDiscountCode.routes';
+import { discountCodeRouter } from './routes/discountCode.routes';
 import { notificationRouter } from './routes/notification.routes';
 import { symbolCatalogRouter } from './routes/symbolCatalog.routes';
 import { stockRouter } from './routes/stock.routes';
@@ -49,6 +51,8 @@ export const createApp = () => {
   app.use(rootRouter);
   app.use(healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/admin', adminDiscountCodeRouter);
+  app.use('/api/discount-codes', discountCodeRouter);
   app.use('/api/notifications', notificationRouter);
   app.use('/api/symbols', symbolCatalogRouter);
   app.use('/api/stocks', stockRouter);

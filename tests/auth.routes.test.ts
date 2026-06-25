@@ -275,6 +275,84 @@ describe('auth routes', () => {
     });
   });
 
+  it('links a Bale account to the authenticated user through the callback endpoint', async () => {
+    authServiceMocks.extractBearerToken.mockReturnValue('token-1');
+    authServiceMocks.getAuthContextFromToken.mockResolvedValue({
+      token: 'token-1',
+      isAuthenticated: true,
+      session: {
+        id: 'session-existing',
+        expiresAt: '2026-07-20T00:00:00.000Z',
+        createdAt: '2026-06-20T00:00:00.000Z'
+      },
+      user: {
+        id: 'user-existing',
+        email: 'existing@example.com',
+        isActive: true
+      }
+    });
+    authServiceMocks.authenticateWithBale.mockResolvedValue({
+      token: 'session-token-3',
+      session: {
+        id: 'session-3',
+        userId: 'user-existing',
+        expiresAt: '2026-07-20T00:00:00.000Z',
+        createdAt: '2026-06-20T00:00:00.000Z'
+      },
+      user: {
+        id: 'user-existing',
+        email: 'existing@example.com',
+        telegramUserId: '9001',
+        telegramUsername: 'linked-user',
+        isActive: true
+      },
+      authAccount: {
+        id: 'auth-3',
+        provider: 'BALE',
+        providerAccountId: '9001'
+      },
+      isNewUser: false,
+      isNewAuthAccount: true
+    });
+
+    const response = await fetch(`${baseUrl}/api/auth/bale/callback`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token-1',
+        'Content-Type': 'application/json',
+        'x-bale-bot-token': 'test-bale-token'
+      },
+      body: JSON.stringify({
+        baleUser: {
+          id: '9001',
+          username: 'linked-user'
+        },
+        email: 'existing@example.com'
+      })
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'OK',
+      isNewUser: false,
+      isNewAuthAccount: true,
+      linkedAccount: true,
+      user: {
+        id: 'user-existing',
+        telegramUserId: '9001'
+      }
+    });
+    expect(authServiceMocks.authenticateWithBale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentUserId: 'user-existing',
+        email: 'existing@example.com',
+        baleUser: expect.objectContaining({
+          id: '9001'
+        })
+      })
+    );
+  });
+
   it('rejects Bale callback requests with an invalid bot token', async () => {
     const response = await fetch(`${baseUrl}/api/auth/bale/callback`, {
       method: 'POST',

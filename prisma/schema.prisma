@@ -35,6 +35,16 @@ enum PaymentTransactionStatus {
   REFUNDED
 }
 
+enum DiscountCodeStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum DiscountValueType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
 model Symbol {
   id             String   @id @default(uuid())
   symbol         String   @unique
@@ -257,6 +267,7 @@ model User {
   otpCodes         OtpCode[]
   subscriptions    Subscription[]
   payments         PaymentTransaction[]
+  createdDiscountCodes DiscountCode[]
   watchlist        UserWatchlistItem[]
   portfolios       Portfolio[]
 }
@@ -321,6 +332,7 @@ model Plan {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   subscriptions Subscription[]
+  discountCodes DiscountCodePlan[]
 }
 
 model Subscription {
@@ -349,9 +361,13 @@ model PaymentTransaction {
   id             String                   @id @default(uuid())
   userId         String
   subscriptionId String?
+  discountCodeId String?
   provider       String
   reference      String
   status         PaymentTransactionStatus
+  amountBeforeDiscount Decimal?           @db.Decimal(18, 2)
+  discountAmount Decimal?                 @db.Decimal(18, 2)
+  discountCodeSnapshot String?
   amount         Decimal                  @db.Decimal(18, 2)
   currency       String
   payload        Json?
@@ -359,10 +375,51 @@ model PaymentTransaction {
   updatedAt      DateTime                 @updatedAt
   user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   subscription   Subscription?            @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  discountCode   DiscountCode?            @relation(fields: [discountCodeId], references: [id], onDelete: SetNull)
 
   @@unique([provider, reference])
   @@index([userId, createdAt])
   @@index([subscriptionId])
+  @@index([discountCodeId])
+}
+
+model DiscountCode {
+  id                    String             @id @default(uuid())
+  code                  String             @unique
+  name                  String
+  description           String?
+  status                DiscountCodeStatus @default(ACTIVE)
+  valueType             DiscountValueType
+  value                 Decimal            @db.Decimal(18, 2)
+  currency              String?
+  minimumSubtotalAmount Decimal?           @db.Decimal(18, 2)
+  maximumDiscountAmount Decimal?           @db.Decimal(18, 2)
+  maxRedemptions        Int?
+  redemptionCount       Int                @default(0)
+  startsAt              DateTime?
+  endsAt                DateTime?
+  metadata              Json?
+  createdByUserId       String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  createdByUser         User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  applicablePlans       DiscountCodePlan[]
+  paymentTransactions   PaymentTransaction[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([createdByUserId, createdAt])
+}
+
+model DiscountCodePlan {
+  id             String       @id @default(uuid())
+  discountCodeId String
+  planId         String
+  createdAt      DateTime     @default(now())
+  discountCode   DiscountCode @relation(fields: [discountCodeId], references: [id], onDelete: Cascade)
+  plan           Plan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([discountCodeId, planId])
+  @@index([planId])
 }
 
 model UserWatchlistItem {
