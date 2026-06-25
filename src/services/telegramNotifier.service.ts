@@ -38,6 +38,17 @@ const sendMessage = async (
   message: string,
   chatId: string | null | undefined
 ): Promise<boolean> => {
+  if (env.NODE_ENV !== 'production') {
+    logger.info(
+      {
+        nodeEnv: env.NODE_ENV
+      },
+      'Bale notifier skipped outside production environment'
+    );
+
+    return false;
+  }
+
   if (!env.BALE_BOT_TOKEN.trim() || !chatId?.trim()) {
     logger.warn(
       {
