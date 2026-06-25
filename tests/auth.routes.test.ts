@@ -11,14 +11,16 @@ const authServiceMocks = vi.hoisted(() => ({
   })),
   getAuthContextFromToken: vi.fn(),
   extractBearerToken: vi.fn(),
-  revokeSession: vi.fn()
+  revokeSession: vi.fn(),
+  authenticateWithBale: vi.fn()
 }));
 
 vi.mock('../src/services/auth.service', () => ({
   authService: {
     buildAnonymousAuthContext: authServiceMocks.buildAnonymousAuthContext,
     getAuthContextFromToken: authServiceMocks.getAuthContextFromToken,
-    revokeSession: authServiceMocks.revokeSession
+    revokeSession: authServiceMocks.revokeSession,
+    authenticateWithBale: authServiceMocks.authenticateWithBale
   },
   extractBearerToken: authServiceMocks.extractBearerToken
 }));
@@ -58,6 +60,8 @@ describe('auth routes', () => {
     authServiceMocks.getAuthContextFromToken.mockReset();
     authServiceMocks.extractBearerToken.mockReset();
     authServiceMocks.revokeSession.mockReset();
+    authServiceMocks.authenticateWithBale.mockReset();
+    process.env.BALE_BOT_TOKEN = 'test-bale-token';
   });
 
   it('returns anonymous auth state when no session is present', async () => {
@@ -87,6 +91,8 @@ describe('auth routes', () => {
       user: {
         id: 'user-1',
         email: 'user@example.com',
+        telegramUserId: '42',
+        telegramUsername: 'bale-user',
         isActive: true
       }
     });
@@ -103,7 +109,9 @@ describe('auth routes', () => {
       authenticated: true,
       user: {
         id: 'user-1',
-        email: 'user@example.com'
+        email: 'user@example.com',
+        telegramUserId: '42',
+        telegramUsername: 'bale-user'
       },
       session: {
         id: 'session-1'
@@ -155,6 +163,155 @@ describe('auth routes', () => {
     await expect(response.json()).resolves.toMatchObject({
       status: 'ERROR',
       englishMessage: 'Authentication required'
+    });
+  });
+
+  it('authenticates a new Bale user through the callback endpoint', async () => {
+    authServiceMocks.authenticateWithBale.mockResolvedValue({
+      token: 'session-token-1',
+      session: {
+        id: 'session-1',
+        userId: 'user-1',
+        expiresAt: '2026-07-20T00:00:00.000Z',
+        createdAt: '2026-06-20T00:00:00.000Z'
+      },
+      user: {
+        id: 'user-1',
+        email: 'bale@example.com',
+        telegramUserId: '42',
+        telegramUsername: 'bale-user',
+        isActive: true
+      },
+      authAccount: {
+        id: 'auth-1',
+        provider: 'BALE',
+        providerAccountId: '42'
+      },
+      isNewUser: true,
+      isNewAuthAccount: true
+    });
+
+    const response = await fetch(`${baseUrl}/api/auth/bale/callback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-bale-bot-token': 'test-bale-token'
+      },
+      body: JSON.stringify({
+        baleUser: {
+          id: '42',
+          username: 'bale-user'
+        },
+        email: 'bale@example.com'
+      })
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'OK',
+      provider: 'BALE',
+      token: 'session-token-1',
+      user: {
+        id: 'user-1',
+        telegramUserId: '42'
+      },
+      isNewUser: true,
+      isNewAuthAccount: true
+    });
+    expect(authServiceMocks.authenticateWithBale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baleUser: expect.objectContaining({
+          id: '42'
+        }),
+        currentUserId: null
+      })
+    );
+  });
+
+  it('authenticates a repeat Bale login through the callback endpoint', async () => {
+    authServiceMocks.authenticateWithBale.mockResolvedValue({
+      token: 'session-token-2',
+      session: {
+        id: 'session-2',
+        userId: 'user-1',
+        expiresAt: '2026-07-20T00:00:00.000Z',
+        createdAt: '2026-06-20T00:00:00.000Z'
+      },
+      user: {
+        id: 'user-1',
+        email: 'bale@example.com',
+        telegramUserId: '42',
+        telegramUsername: 'bale-user',
+        isActive: true
+      },
+      authAccount: {
+        id: 'auth-1',
+        provider: 'BALE',
+        providerAccountId: '42'
+      },
+      isNewUser: false,
+      isNewAuthAccount: false
+    });
+
+    const response = await fetch(`${baseUrl}/api/auth/bale/callback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-bale-bot-token': 'test-bale-token'
+      },
+      body: JSON.stringify({
+        baleUser: {
+          id: 42,
+          username: 'bale-user'
+        }
+      })
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'OK',
+      isNewUser: false,
+      isNewAuthAccount: false
+    });
+  });
+
+  it('rejects Bale callback requests with an invalid bot token', async () => {
+    const response = await fetch(`${baseUrl}/api/auth/bale/callback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-bale-bot-token': 'wrong-token'
+      },
+      body: JSON.stringify({
+        baleUser: {
+          id: '42'
+        }
+      })
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'ERROR',
+      englishMessage: 'Invalid Bale bot token'
+    });
+  });
+
+  it('rejects invalid Bale callback payloads', async () => {
+    const response = await fetch(`${baseUrl}/api/auth/bale/callback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-bale-bot-token': 'test-bale-token'
+      },
+      body: JSON.stringify({
+        email: 'not-valid'
+      })
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'ERROR',
+      englishMessage: 'Invalid Bale auth payload'
     });
   });
 });

@@ -1,8 +1,11 @@
 import { createHash, randomBytes } from 'crypto';
 
+import type { AuthProvider } from '@prisma/client';
+
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import { sessionRepository } from '../repositories/session.repository';
+import { userAuthAccountRepository } from '../repositories/userAuthAccount.repository';
 import { userRepository } from '../repositories/user.repository';
 import type {
   AuthContext,
@@ -13,6 +16,81 @@ import type {
 
 const SESSION_TOKEN_BYTES = 32;
 const BEARER_PREFIX = 'Bearer ';
+const BALE_AUTH_PROVIDER = 'BALE' as AuthProvider;
+
+type BaleAuthUserInput = {
+  id: string;
+  username?: string | null | undefined;
+  firstName?: string | null | undefined;
+  lastName?: string | null | undefined;
+  avatarUrl?: string | null | undefined;
+};
+
+type BaleAuthenticateInput = {
+  baleUser: BaleAuthUserInput;
+  email?: string | null | undefined;
+  phone?: string | null | undefined;
+  displayName?: string | null | undefined;
+  currentUserId?: string | null | undefined;
+  sessionContext?: SessionContext | undefined;
+};
+
+const normalizeNullableString = (value: string | null | undefined) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const buildDisplayName = (input: {
+  displayName?: string | null | undefined;
+  firstName?: string | null | undefined;
+  lastName?: string | null | undefined;
+  username?: string | null | undefined;
+}) => {
+  const explicitDisplayName = normalizeNullableString(input.displayName);
+  if (explicitDisplayName) {
+    return explicitDisplayName;
+  }
+
+  const parts = [
+    normalizeNullableString(input.firstName),
+    normalizeNullableString(input.lastName)
+  ].filter((part): part is string => Boolean(part));
+
+  if (parts.length > 0) {
+    return parts.join(' ');
+  }
+
+  return normalizeNullableString(input.username);
+};
+
+const throwIdentityConflict = (reason: string) => {
+  throw new AppError('حساب بله با کاربر دیگری در تعارض است.', 409, {
+    englishMessage: reason
+  });
+};
+
+const ensureUniqueUserMatch = (
+  users: Array<
+    | Awaited<ReturnType<typeof userRepository.findById>>
+    | Awaited<ReturnType<typeof userRepository.findByEmail>>
+  >
+) => {
+  const distinctUsers = new Map(
+    users
+      .filter((user): user is NonNullable<typeof user> => Boolean(user))
+      .map((user) => [user.id, user])
+  );
+
+  if (distinctUsers.size > 1) {
+    throwIdentityConflict('Bale identity matches multiple existing users');
+  }
+
+  return [...distinctUsers.values()][0] ?? null;
+};
 
 const toAuthenticatedUser = (user: Awaited<ReturnType<typeof userRepository.findById>>): AuthenticatedUser | null => {
   if (!user) {
@@ -116,6 +194,125 @@ export const authService = {
     return {
       token,
       session: toAuthenticatedSession(session)
+    };
+  },
+
+  async authenticateWithBale(input: BaleAuthenticateInput) {
+    const providerAccountId = normalizeNullableString(input.baleUser.id);
+    if (!providerAccountId) {
+      throw new AppError('شناسه کاربر بله معتبر نیست.', 400, {
+        englishMessage: 'Bale user id is required'
+      });
+    }
+
+    const email = normalizeNullableString(input.email)?.toLowerCase() ?? null;
+    const phone = normalizeNullableString(input.phone);
+    const username = normalizeNullableString(input.baleUser.username);
+    const firstName = normalizeNullableString(input.baleUser.firstName);
+    const lastName = normalizeNullableString(input.baleUser.lastName);
+    const avatarUrl = normalizeNullableString(input.baleUser.avatarUrl);
+    const displayName = buildDisplayName({
+      displayName: input.displayName,
+      firstName,
+      lastName,
+      username
+    });
+
+    const linkedAccount = await userAuthAccountRepository.findByProviderAccount(
+      BALE_AUTH_PROVIDER,
+      providerAccountId
+    );
+
+    const currentUser = input.currentUserId
+      ? await userRepository.findById(input.currentUserId)
+      : null;
+
+    if (input.currentUserId && !currentUser) {
+      throw new AppError('کاربر یافت نشد.', 404, {
+        englishMessage: 'Current user not found'
+      });
+    }
+
+    if (
+      currentUser &&
+      linkedAccount &&
+      linkedAccount.userId !== currentUser.id
+    ) {
+      throwIdentityConflict('Bale account is already linked to another user');
+    }
+
+    const emailUser = email ? await userRepository.findByEmail(email) : null;
+    const phoneUser = phone ? await userRepository.findByPhone(phone) : null;
+    const legacyBaleUser = await userRepository.findByTelegramUserId(
+      providerAccountId
+    );
+
+    const targetUser =
+      currentUser ??
+      (linkedAccount ? await userRepository.findById(linkedAccount.userId) : null) ??
+      ensureUniqueUserMatch([emailUser, phoneUser, legacyBaleUser]);
+
+    if (emailUser && targetUser && emailUser.id !== targetUser.id) {
+      throwIdentityConflict('Email belongs to another user');
+    }
+
+    if (phoneUser && targetUser && phoneUser.id !== targetUser.id) {
+      throwIdentityConflict('Phone belongs to another user');
+    }
+
+    let user =
+      targetUser ??
+      (await userRepository.create({
+        displayName,
+        firstName,
+        lastName,
+        email,
+        phone,
+        avatarUrl,
+        telegramUserId: providerAccountId,
+        telegramUsername: username
+      }));
+
+    if (targetUser) {
+      user = await userRepository.update(targetUser.id, {
+        displayName: displayName ?? targetUser.displayName,
+        firstName: firstName ?? targetUser.firstName,
+        lastName: lastName ?? targetUser.lastName,
+        email: email ?? targetUser.email,
+        phone: phone ?? targetUser.phone,
+        avatarUrl: avatarUrl ?? targetUser.avatarUrl,
+        telegramUserId: providerAccountId,
+        telegramUsername: username ?? targetUser.telegramUsername
+      });
+    }
+
+    const authAccount = await userAuthAccountRepository.upsertByProviderAccount({
+      userId: user.id,
+      provider: BALE_AUTH_PROVIDER,
+      providerAccountId,
+      providerEmail: email,
+      providerPhone: phone,
+      metadata: {
+        username,
+        firstName,
+        lastName,
+        avatarUrl,
+        displayName
+      }
+    });
+
+    const { token, session } = await this.createSession(
+      user.id,
+      input.sessionContext
+    );
+
+    return {
+      token,
+      session,
+      user: toAuthenticatedUser(user),
+      authAccount,
+      isNewUser: !targetUser,
+      isNewAuthAccount: !linkedAccount
     };
   },
 

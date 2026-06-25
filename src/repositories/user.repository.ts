@@ -21,6 +21,25 @@ export const userRepository = {
     });
   },
 
+  async findByPhone(phone: string) {
+    return prisma.user.findUnique({
+      where: { phone }
+    });
+  },
+
+  async findByTelegramUserId(telegramUserId: string) {
+    return prisma.user.findUnique({
+      where: { telegramUserId }
+    });
+  },
+
+  async update(id: string, data: Prisma.UserUncheckedUpdateInput) {
+    return prisma.user.update({
+      where: { id },
+      data
+    });
+  },
+
   async updateLastLogin(id: string, lastLoginAt = new Date()) {
     return prisma.user.update({
       where: { id },

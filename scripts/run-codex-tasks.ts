@@ -99,24 +99,23 @@ const runScope = (scope: TaskScope, runDir: string, options: RunOptions) => {
   const prompt = buildExecPrompt(scope);
   const outputPath = path.join(runDir, `${scope}.last-message.txt`);
   const args = [
+    '--ask-for-approval',
+    'never',
+    '--sandbox',
+    'workspace-write',
     'exec',
     '--cd',
     process.cwd(),
-    '--sandbox',
-    'workspace-write',
-    '--ask-for-approval',
-    'never',
     '--output-last-message',
-    outputPath,
-    '-'
+    outputPath
   ];
 
   if (options.model) {
-    args.splice(1, 0, '--model', options.model);
+    args.unshift('--model', options.model);
   }
 
   if (options.search) {
-    args.splice(1, 0, '--search');
+    args.unshift('--search');
   }
 
   if (options.dryRun) {
@@ -130,6 +129,7 @@ const runScope = (scope: TaskScope, runDir: string, options: RunOptions) => {
     cwd: process.cwd(),
     encoding: 'utf8',
     input: prompt,
+    shell: true,
     stdio: ['pipe', 'inherit', 'inherit']
   });
 
@@ -148,6 +148,9 @@ const main = () => {
     const result = runScope(scope, runDir, options);
 
     if (result.status !== 0) {
+      if (result.error) {
+        console.error(result.error);
+      }
       console.error(`Scope failed: ${scope}`);
       process.exit(result.status ?? 1);
     }
