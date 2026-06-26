@@ -1,0 +1,101 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Market Frontend Integration Contract (notifications)",
+    "version": "2026-06-26.1",
+    "description": "Machine-readable contract for the notifications endpoint scope."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    }
+  ],
+  "paths": {
+    "/api/notifications/telegram/test": {
+      "post": {
+        "operationId": "sendTelegramTestNotification",
+        "summary": "Trigger the test Bale/Telegram notification endpoint.",
+        "tags": [
+          "notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "Trigger the test Bale/Telegram notification endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationTestResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ERROR"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "englishMessage": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "preview": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "accessLevel": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "NotificationTestResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "sent",
+          "telegramConfigured"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "ERROR"
+            ]
+          },
+          "sent": {
+            "type": "boolean"
+          },
+          "telegramConfigured": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "securitySchemes": {}
+  }
+}

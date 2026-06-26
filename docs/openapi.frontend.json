@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Market Frontend Integration Contract",
-    "version": "2026-06-25.1",
-    "description": "Machine-readable contract for watchlist and alert endpoints intended for frontend integrations and Codex agents."
+    "version": "2026-06-26.1",
+    "description": "Machine-readable contract for all current API endpoints intended for frontend integrations and Codex agents."
   },
   "servers": [
     {
@@ -11,37 +11,914 @@
       "description": "Local development"
     }
   ],
-  "security": [
-    {
-      "bearerAuth": []
-    }
-  ],
   "paths": {
-    "/api/watchlist": {
+    "/": {
       "get": {
-        "operationId": "listWatchlist",
+        "operationId": "getRootPage",
+        "summary": "Render the built-in HTML request sample page.",
         "tags": [
-          "watchlist"
-        ],
-        "summary": "List the authenticated user watchlist.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
+          "root"
         ],
         "responses": {
           "200": {
-            "description": "Watchlist items returned successfully.",
+            "description": "Render the built-in HTML request sample page.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Return the health probe payload.",
+        "tags": [
+          "root"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the health probe payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListWatchlistResponse"
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "getCurrentAuth",
+        "summary": "Return the current auth session state.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the current auth session state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentAuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/subscription": {
+      "get": {
+        "operationId": "getCurrentSubscription",
+        "summary": "Return the effective subscription access for the authenticated user.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the effective subscription access for the authenticated user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionAccessResponse"
                 }
               }
             }
           },
           "401": {
-            "description": "Authentication required.",
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/email/request-otp": {
+      "post": {
+        "operationId": "requestEmailOtp",
+        "summary": "Send a login OTP to the provided email address using Resend.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Send a login OTP to the provided email address using Resend.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailOtpRequestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error 429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Error 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailOtpRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/email/verify-otp": {
+      "post": {
+        "operationId": "verifyEmailOtp",
+        "summary": "Verify an email OTP and create or link a session-backed account.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Verify an email OTP and create or link a session-backed account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FederatedAuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailOtpVerifyRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/bale/callback": {
+      "post": {
+        "operationId": "authenticateWithBale",
+        "summary": "Authenticate or link a Bale account using the bot callback flow.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Authenticate or link a Bale account using the bot callback flow.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FederatedAuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "baleBotToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaleCallbackRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/telegram/callback": {
+      "post": {
+        "operationId": "authenticateWithTelegram",
+        "summary": "Authenticate or link a Telegram account using Telegram Login Widget data.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Authenticate or link a Telegram account using Telegram Login Widget data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FederatedAuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramCallbackRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/google/callback": {
+      "post": {
+        "operationId": "authenticateWithGoogle",
+        "summary": "Authenticate or link a Google account using a Google ID token.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Authenticate or link a Google account using a Google ID token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FederatedAuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCallbackRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "logoutCurrentSession",
+        "summary": "Revoke the current bearer session.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoke the current bearer session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/subscription/trial": {
+      "post": {
+        "operationId": "activateTrialSubscription",
+        "summary": "Activate the trial subscription for the authenticated user.",
+        "tags": [
+          "auth"
+        ],
+        "responses": {
+          "201": {
+            "description": "Activate the trial subscription for the authenticated user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionAccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/discount-codes": {
+      "post": {
+        "operationId": "createDiscountCode",
+        "summary": "Create a discount code for internal/admin workflows.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a discount code for internal/admin workflows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscountCodeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "internalApiToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDiscountCodeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/discount-codes/apply": {
+      "post": {
+        "operationId": "applyDiscountCode",
+        "summary": "Redeem a discount code for a plan checkout flow through the internal route.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Redeem a discount code for a plan checkout flow through the internal route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscountPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "internalApiToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscountCodeCheckoutRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/discount-codes/{id}/status": {
+      "post": {
+        "operationId": "updateDiscountCodeStatus",
+        "summary": "Update a discount code status for internal/admin workflows.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "Update a discount code status for internal/admin workflows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscountCodeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "internalApiToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDiscountCodeStatusRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/discount-codes/preview": {
+      "post": {
+        "operationId": "previewDiscountCode",
+        "summary": "Preview a discount code against a plan for the authenticated user.",
+        "tags": [
+          "discounts"
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview a discount code against a plan for the authenticated user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscountPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscountCodeCheckoutRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/telegram/test": {
+      "post": {
+        "operationId": "sendTelegramTestNotification",
+        "summary": "Trigger the test Bale/Telegram notification endpoint.",
+        "tags": [
+          "notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "Trigger the test Bale/Telegram notification endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationTestResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/symbols/import": {
+      "post": {
+        "operationId": "importSymbols",
+        "summary": "Import and upsert the symbol catalog from the upstream source.",
+        "tags": [
+          "symbols"
+        ],
+        "responses": {
+          "200": {
+            "description": "Import and upsert the symbol catalog from the upstream source.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolImportResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Error 502",
             "content": {
               "application/json": {
                 "schema": {
@@ -51,13 +928,637 @@
             }
           }
         }
-      },
+      }
+    },
+    "/api/symbols/grouped": {
+      "get": {
+        "operationId": "getGroupedSymbols",
+        "summary": "Return the grouped symbol catalog.",
+        "tags": [
+          "symbols"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the grouped symbol catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupedSymbolsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/symbols/search": {
+      "get": {
+        "operationId": "searchSymbols",
+        "summary": "Search symbols by query text.",
+        "tags": [
+          "symbols"
+        ],
+        "responses": {
+          "200": {
+            "description": "Search symbols by query text.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSymbolsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/scan": {
       "post": {
-        "operationId": "addWatchlistSymbol",
+        "operationId": "runManualSignalScan",
+        "summary": "Run a manual signal scan across specific or default symbols.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Run a manual signal scan across specific or default symbols.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalScanSummaryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualSignalScanRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/scan/status": {
+      "get": {
+        "operationId": "getSignalScanStatus",
+        "summary": "Return the in-memory runtime and schedule status for signal scans.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the in-memory runtime and schedule status for signal scans.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalScanStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/analyses/latest": {
+      "get": {
+        "operationId": "getLatestAnalyses",
+        "summary": "Return latest cached analysis summaries.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return latest cached analysis summaries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestAnalysesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/backtests/run": {
+      "post": {
+        "operationId": "runBacktest",
+        "summary": "Run a backtest across one or more symbols.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "201": {
+            "description": "Run a backtest across one or more symbols.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunBacktestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunBacktestRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/backtests/compare": {
+      "post": {
+        "operationId": "compareBacktests",
+        "summary": "Run and compare multiple backtest variants for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "201": {
+            "description": "Run and compare multiple backtest variants for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareBacktestsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompareBacktestsRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/backtests/reports": {
+      "get": {
+        "operationId": "getBacktestReport",
+        "summary": "Return a backtest report using run filters and grouping.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return a backtest report using run filters and grouping.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestReportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/{symbol}/analysis": {
+      "get": {
+        "operationId": "getStockAnalysis",
+        "summary": "Return the full stock analysis payload for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the full stock analysis payload for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockAnalysisResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Error 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/stocks/{symbol}/refresh": {
+      "post": {
+        "operationId": "refreshStockHistory",
+        "summary": "Refresh and persist stock history for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Refresh and persist stock history for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshStockHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Error 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshStockHistoryRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/stocks/{symbol}/history": {
+      "get": {
+        "operationId": "getStockHistory",
+        "summary": "Return paginated stored history rows for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return paginated stored history rows for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/stocks/{symbol}/latest": {
+      "get": {
+        "operationId": "getLatestStockMetric",
+        "summary": "Return the latest stored metric row for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the latest stored metric row for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestStockMetricResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/watchlist": {
+      "get": {
+        "operationId": "listWatchlist",
+        "summary": "List the authenticated user watchlist.",
         "tags": [
           "watchlist"
         ],
+        "responses": {
+          "200": {
+            "description": "List the authenticated user watchlist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListWatchlistResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "addWatchlistSymbol",
         "summary": "Add a symbol to the authenticated user watchlist.",
+        "tags": [
+          "watchlist"
+        ],
+        "responses": {
+          "201": {
+            "description": "Add a symbol to the authenticated user watchlist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddWatchlistSymbolResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
         "security": [
           {
             "bearerAuth": []
@@ -72,20 +1573,29 @@
               }
             }
           }
-        },
+        }
+      }
+    },
+    "/api/watchlist/{symbol}": {
+      "delete": {
+        "operationId": "removeWatchlistSymbol",
+        "summary": "Remove a symbol from the authenticated user watchlist.",
+        "tags": [
+          "watchlist"
+        ],
         "responses": {
-          "201": {
-            "description": "The symbol was added to the watchlist.",
+          "200": {
+            "description": "Remove a symbol from the authenticated user watchlist.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AddWatchlistSymbolResponse"
+                  "$ref": "#/components/schemas/RemoveWatchlistSymbolResponse"
                 }
               }
             }
           },
           "400": {
-            "description": "The request body is invalid.",
+            "description": "Error 400",
             "content": {
               "application/json": {
                 "schema": {
@@ -95,7 +1605,7 @@
             }
           },
           "401": {
-            "description": "Authentication required.",
+            "description": "Error 401",
             "content": {
               "application/json": {
                 "schema": {
@@ -104,18 +1614,8 @@
               }
             }
           },
-          "403": {
-            "description": "The user watchlist limit has been reached.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The symbol already exists in the watchlist.",
+          "404": {
+            "description": "Error 404",
             "content": {
               "application/json": {
                 "schema": {
@@ -124,16 +1624,7 @@
               }
             }
           }
-        }
-      }
-    },
-    "/api/watchlist/{symbol}": {
-      "delete": {
-        "operationId": "removeWatchlistSymbol",
-        "tags": [
-          "watchlist"
-        ],
-        "summary": "Remove a symbol from the authenticated user watchlist.",
+        },
         "security": [
           {
             "bearerAuth": []
@@ -149,66 +1640,19 @@
               "minLength": 1
             }
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "The symbol was removed from the watchlist.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RemoveWatchlistSymbolResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The symbol path parameter is invalid.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The symbol was not found in the watchlist.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
+        ]
       }
     },
     "/api/alerts/rules": {
       "get": {
         "operationId": "listAlertRules",
+        "summary": "List the authenticated user alert rules.",
         "tags": [
           "alerts"
         ],
-        "summary": "List the authenticated user alert rules.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
         "responses": {
           "200": {
-            "description": "Alert rules returned successfully.",
+            "description": "List the authenticated user alert rules.",
             "content": {
               "application/json": {
                 "schema": {
@@ -218,7 +1662,7 @@
             }
           },
           "401": {
-            "description": "Authentication required.",
+            "description": "Error 401",
             "content": {
               "application/json": {
                 "schema": {
@@ -227,14 +1671,51 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       },
       "post": {
         "operationId": "createAlertRule",
+        "summary": "Create an alert rule for the authenticated user.",
         "tags": [
           "alerts"
         ],
-        "summary": "Create an alert rule for the authenticated user.",
+        "responses": {
+          "201": {
+            "description": "Create an alert rule for the authenticated user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateAlertRuleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
         "security": [
           {
             "bearerAuth": []
@@ -249,20 +1730,29 @@
               }
             }
           }
-        },
+        }
+      }
+    },
+    "/api/alerts/rules/{id}": {
+      "delete": {
+        "operationId": "deleteAlertRule",
+        "summary": "Delete an alert rule owned by the authenticated user.",
+        "tags": [
+          "alerts"
+        ],
         "responses": {
-          "201": {
-            "description": "The alert rule was created.",
+          "200": {
+            "description": "Delete an alert rule owned by the authenticated user.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateAlertRuleResponse"
+                  "$ref": "#/components/schemas/DeleteAlertRuleResponse"
                 }
               }
             }
           },
           "400": {
-            "description": "The request body is invalid.",
+            "description": "Error 400",
             "content": {
               "application/json": {
                 "schema": {
@@ -272,7 +1762,17 @@
             }
           },
           "401": {
-            "description": "Authentication required.",
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
             "content": {
               "application/json": {
                 "schema": {
@@ -281,16 +1781,7 @@
               }
             }
           }
-        }
-      }
-    },
-    "/api/alerts/rules/{id}": {
-      "delete": {
-        "operationId": "deleteAlertRule",
-        "tags": [
-          "alerts"
-        ],
-        "summary": "Delete an alert rule owned by the authenticated user.",
+        },
         "security": [
           {
             "bearerAuth": []
@@ -306,20 +1797,63 @@
               "minLength": 1
             }
           }
+        ]
+      }
+    },
+    "/api/portfolios": {
+      "get": {
+        "operationId": "listPortfolios",
+        "summary": "List the authenticated user portfolios.",
+        "tags": [
+          "root"
         ],
         "responses": {
           "200": {
-            "description": "The alert rule was deleted.",
+            "description": "List the authenticated user portfolios.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeleteAlertRuleResponse"
+                  "$ref": "#/components/schemas/ListPortfoliosResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createPortfolio",
+        "summary": "Create a portfolio for the authenticated user.",
+        "tags": [
+          "root"
+        ],
+        "responses": {
+          "201": {
+            "description": "Create a portfolio for the authenticated user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioResponse"
                 }
               }
             }
           },
           "400": {
-            "description": "The path parameter is invalid.",
+            "description": "Error 400",
             "content": {
               "application/json": {
                 "schema": {
@@ -329,7 +1863,63 @@
             }
           },
           "401": {
-            "description": "Authentication required.",
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePortfolioRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portfolios/{portfolioId}": {
+      "get": {
+        "operationId": "getPortfolio",
+        "summary": "Return one owned portfolio with holdings and metrics.",
+        "tags": [
+          "portfolios"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return one owned portfolio with holdings and metrics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
             "content": {
               "application/json": {
                 "schema": {
@@ -339,7 +1929,7 @@
             }
           },
           "404": {
-            "description": "The alert rule was not found.",
+            "description": "Error 404",
             "content": {
               "application/json": {
                 "schema": {
@@ -348,7 +1938,410 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolioId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "renamePortfolio",
+        "summary": "Rename one owned portfolio.",
+        "tags": [
+          "portfolios"
+        ],
+        "responses": {
+          "200": {
+            "description": "Rename one owned portfolio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenamePortfolioRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "portfolioId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deletePortfolio",
+        "summary": "Delete one owned portfolio.",
+        "tags": [
+          "portfolios"
+        ],
+        "responses": {
+          "200": {
+            "description": "Delete one owned portfolio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletePortfolioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "portfolioId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/portfolios/{portfolioId}/holdings": {
+      "post": {
+        "operationId": "addPortfolioHolding",
+        "summary": "Add a holding to one owned portfolio.",
+        "tags": [
+          "portfolios"
+        ],
+        "responses": {
+          "201": {
+            "description": "Add a holding to one owned portfolio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePortfolioHoldingRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "portfolioId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/portfolios/{portfolioId}/holdings/{symbol}": {
+      "put": {
+        "operationId": "updatePortfolioHolding",
+        "summary": "Update one holding in an owned portfolio.",
+        "tags": [
+          "portfolios"
+        ],
+        "responses": {
+          "200": {
+            "description": "Update one holding in an owned portfolio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePortfolioHoldingRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "portfolioId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "removePortfolioHolding",
+        "summary": "Remove one holding from an owned portfolio.",
+        "tags": [
+          "portfolios"
+        ],
+        "responses": {
+          "200": {
+            "description": "Remove one holding from an owned portfolio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "portfolioId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
       }
     }
   },
@@ -358,6 +2351,16 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "Bearer session token"
+      },
+      "internalApiToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-internal-api-token"
+      },
+      "baleBotToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-bale-bot-token"
       }
     },
     "schemas": {
@@ -384,6 +2387,10 @@
             "type": "object",
             "additionalProperties": true
           },
+          "preview": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "limit": {
             "type": "integer"
           },
@@ -393,23 +2400,874 @@
         },
         "additionalProperties": true
       },
-      "WatchlistItem": {
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok - 1"
+            ]
+          }
+        }
+      },
+      "CurrentAuthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "authenticated",
+          "user",
+          "session"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "authenticated": {
+            "type": "boolean"
+          },
+          "user": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "session": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "SubscriptionAccessResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "access"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "access": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "BaleCallbackRequest": {
+        "type": "object",
+        "required": [
+          "baleUser"
+        ],
+        "properties": {
+          "baleUser": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmailOtpRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmailOtpRequestResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "channel",
+          "email",
+          "expiresAt",
+          "retryAfterSeconds"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "EMAIL"
+            ]
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retryAfterSeconds": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmailOtpVerifyRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "code"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^\\d{4,8}$"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "FederatedAuthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "provider",
+          "authenticated",
+          "token",
+          "user"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "BALE",
+              "EMAIL",
+              "TELEGRAM",
+              "GOOGLE"
+            ]
+          },
+          "authenticated": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string"
+          },
+          "user": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "session": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "authAccount": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "isNewUser": {
+            "type": "boolean"
+          },
+          "linkedAccount": {
+            "type": "boolean"
+          },
+          "isNewAuthAccount": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TelegramCallbackRequest": {
         "type": "object",
         "required": [
           "id",
-          "symbol",
-          "createdAt"
+          "first_name",
+          "auth_date",
+          "hash"
         ],
         "properties": {
           "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "first_name": {
             "type": "string"
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "photo_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "auth_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "hash": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GoogleCallbackRequest": {
+        "type": "object",
+        "required": [
+          "idToken"
+        ],
+        "properties": {
+          "idToken": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "loggedOut"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "loggedOut": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateDiscountCodeRequest": {
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "valueType",
+          "value"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "valueType": {
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "DiscountCodeCheckoutRequest": {
+        "type": "object",
+        "required": [
+          "code",
+          "planCode"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "planCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateDiscountCodeStatusRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiscountCodeResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "discountCode"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "discountCode": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "DiscountPreviewResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "preview"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "preview": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "NotificationTestResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "sent",
+          "telegramConfigured"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "ERROR"
+            ]
+          },
+          "sent": {
+            "type": "boolean"
+          },
+          "telegramConfigured": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SymbolImportResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "source",
+          "importedAt",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "importedAt": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "GroupedSymbolsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "grouping",
+          "updatedAt",
+          "groups"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "grouping": {
+            "type": "string",
+            "enum": [
+              "macro",
+              "official"
+            ]
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groups": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": true
+              }
+            ]
+          }
+        }
+      },
+      "SearchSymbolsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "query",
+          "results"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "query": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "ManualSignalScanRequest": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forceRefresh": {
+            "type": "boolean"
+          },
+          "includeRealLegal": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SignalScanSummaryResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "scannedAt",
+          "symbolsRequested",
+          "scannedCount",
+          "results"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "scannedAt": {
+            "type": "string"
+          },
+          "symbolsRequested": {
+            "type": "integer"
+          },
+          "scannedCount": {
+            "type": "integer"
+          },
+          "okCount": {
+            "type": "integer"
+          },
+          "insufficientDataCount": {
+            "type": "integer"
+          },
+          "errorCount": {
+            "type": "integer"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "SignalScanStatusResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "schedule"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "schedule": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "LatestAnalysesResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "limit",
+          "offset",
+          "items"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "RunBacktestRequest": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "RunBacktestResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "run"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "ERROR"
+            ]
+          },
+          "run": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "diagnostics": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "CompareBacktestsRequest": {
+        "type": "object",
+        "required": [
+          "symbol"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "CompareBacktestsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "symbol",
+          "comparisonCount",
+          "variants",
+          "compactReport"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
           },
           "symbol": {
             "type": "string"
           },
-          "createdAt": {
+          "comparisonCount": {
+            "type": "integer"
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "compactReport": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "BacktestReportResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "run",
+          "filters",
+          "report"
+        ],
+        "properties": {
+          "status": {
             "type": "string",
-            "format": "date-time"
+            "enum": [
+              "OK"
+            ]
+          },
+          "run": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "totalMatchedSnapshots": {
+            "type": "integer"
+          },
+          "returnedSnapshots": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "report": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "StockAnalysisResponse": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "RefreshStockHistoryRequest": {
+        "type": "object",
+        "properties": {
+          "includeRealLegal": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RefreshStockHistoryResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "symbol",
+          "refreshed",
+          "includeRealLegal",
+          "rowsUpserted",
+          "latestDataDate"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "refreshed": {
+            "type": "boolean"
+          },
+          "includeRealLegal": {
+            "type": "boolean"
+          },
+          "rowsUpserted": {
+            "type": "integer"
+          },
+          "latestDataDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "StockHistoryResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "symbol",
+          "limit",
+          "offset",
+          "rows"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "LatestStockMetricResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "symbol",
+          "row"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "row": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       },
@@ -442,7 +3300,8 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/WatchlistItem"
+              "type": "object",
+              "additionalProperties": true
             }
           }
         }
@@ -461,7 +3320,8 @@
             ]
           },
           "item": {
-            "$ref": "#/components/schemas/WatchlistItem"
+            "type": "object",
+            "additionalProperties": true
           }
         }
       },
@@ -480,95 +3340,7 @@
           },
           "removed": {
             "type": "object",
-            "required": [
-              "symbol"
-            ],
-            "properties": {
-              "symbol": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      },
-      "AlertRule": {
-        "type": "object",
-        "required": [
-          "id",
-          "type",
-          "scope",
-          "symbol",
-          "signalAction",
-          "minScore",
-          "watchlistChangeEvent",
-          "enabled",
-          "cooldownMinutes",
-          "createdAt",
-          "updatedAt"
-        ],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "SIGNAL_ACTION",
-              "SIGNAL_SCORE",
-              "WATCHLIST_CHANGE"
-            ]
-          },
-          "scope": {
-            "type": "string",
-            "enum": [
-              "ALL_WATCHLIST",
-              "SYMBOL"
-            ]
-          },
-          "symbol": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "signalAction": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "minScore": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "watchlistChangeEvent": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "ADDED",
-              "REMOVED",
-              null
-            ]
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "cooldownMinutes": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 10080
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
+            "additionalProperties": true
           }
         }
       },
@@ -579,61 +3351,10 @@
         ],
         "properties": {
           "type": {
-            "type": "string",
-            "enum": [
-              "SIGNAL_ACTION",
-              "SIGNAL_SCORE",
-              "WATCHLIST_CHANGE"
-            ]
-          },
-          "scope": {
-            "type": "string",
-            "enum": [
-              "ALL_WATCHLIST",
-              "SYMBOL"
-            ]
-          },
-          "symbol": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "minLength": 1
-          },
-          "signalAction": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "minLength": 1
-          },
-          "minScore": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "watchlistChangeEvent": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "ADDED",
-              "REMOVED",
-              null
-            ]
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "cooldownMinutes": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 10080
+            "type": "string"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       },
       "ListAlertRulesResponse": {
         "type": "object",
@@ -651,7 +3372,8 @@
           "rules": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AlertRule"
+              "type": "object",
+              "additionalProperties": true
             }
           }
         }
@@ -670,7 +3392,8 @@
             ]
           },
           "rule": {
-            "$ref": "#/components/schemas/AlertRule"
+            "type": "object",
+            "additionalProperties": true
           }
         }
       },
@@ -689,14 +3412,140 @@
           },
           "removed": {
             "type": "object",
-            "required": [
-              "id"
-            ],
-            "properties": {
-              "id": {
-                "type": "string"
-              }
+            "additionalProperties": true
+          }
+        }
+      },
+      "CreatePortfolioRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RenamePortfolioRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatePortfolioHoldingRequest": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "quantity"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "averageBuyPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdatePortfolioHoldingRequest": {
+        "type": "object",
+        "required": [
+          "quantity"
+        ],
+        "properties": {
+          "quantity": {
+            "type": "number"
+          },
+          "averageBuyPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ListPortfoliosResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "portfolios"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "portfolios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
             }
+          }
+        }
+      },
+      "PortfolioResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "portfolio"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "portfolio": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "DeletePortfolioResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "removed"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "removed": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       }

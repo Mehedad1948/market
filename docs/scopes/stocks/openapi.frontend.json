@@ -1,0 +1,838 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Market Frontend Integration Contract (stocks)",
+    "version": "2026-06-26.1",
+    "description": "Machine-readable contract for the stocks endpoint scope."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    }
+  ],
+  "paths": {
+    "/api/stocks/scan": {
+      "post": {
+        "operationId": "runManualSignalScan",
+        "summary": "Run a manual signal scan across specific or default symbols.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Run a manual signal scan across specific or default symbols.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalScanSummaryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualSignalScanRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/scan/status": {
+      "get": {
+        "operationId": "getSignalScanStatus",
+        "summary": "Return the in-memory runtime and schedule status for signal scans.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the in-memory runtime and schedule status for signal scans.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalScanStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/analyses/latest": {
+      "get": {
+        "operationId": "getLatestAnalyses",
+        "summary": "Return latest cached analysis summaries.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return latest cached analysis summaries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestAnalysesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/backtests/run": {
+      "post": {
+        "operationId": "runBacktest",
+        "summary": "Run a backtest across one or more symbols.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "201": {
+            "description": "Run a backtest across one or more symbols.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunBacktestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunBacktestRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/backtests/compare": {
+      "post": {
+        "operationId": "compareBacktests",
+        "summary": "Run and compare multiple backtest variants for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "201": {
+            "description": "Run and compare multiple backtest variants for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareBacktestsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error 500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompareBacktestsRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/backtests/reports": {
+      "get": {
+        "operationId": "getBacktestReport",
+        "summary": "Return a backtest report using run filters and grouping.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return a backtest report using run filters and grouping.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestReportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stocks/{symbol}/analysis": {
+      "get": {
+        "operationId": "getStockAnalysis",
+        "summary": "Return the full stock analysis payload for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the full stock analysis payload for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockAnalysisResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Error 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/stocks/{symbol}/refresh": {
+      "post": {
+        "operationId": "refreshStockHistory",
+        "summary": "Refresh and persist stock history for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Refresh and persist stock history for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshStockHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Error 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshStockHistoryRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/stocks/{symbol}/history": {
+      "get": {
+        "operationId": "getStockHistory",
+        "summary": "Return paginated stored history rows for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return paginated stored history rows for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/stocks/{symbol}/latest": {
+      "get": {
+        "operationId": "getLatestStockMetric",
+        "summary": "Return the latest stored metric row for one symbol.",
+        "tags": [
+          "stocks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the latest stored metric row for one symbol.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestStockMetricResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ERROR"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "englishMessage": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "preview": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "accessLevel": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "ManualSignalScanRequest": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forceRefresh": {
+            "type": "boolean"
+          },
+          "includeRealLegal": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SignalScanSummaryResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "scannedAt",
+          "symbolsRequested",
+          "scannedCount",
+          "results"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "scannedAt": {
+            "type": "string"
+          },
+          "symbolsRequested": {
+            "type": "integer"
+          },
+          "scannedCount": {
+            "type": "integer"
+          },
+          "okCount": {
+            "type": "integer"
+          },
+          "insufficientDataCount": {
+            "type": "integer"
+          },
+          "errorCount": {
+            "type": "integer"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "SignalScanStatusResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "schedule"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "schedule": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "LatestAnalysesResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "limit",
+          "offset",
+          "items"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "RunBacktestRequest": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "CompareBacktestsRequest": {
+        "type": "object",
+        "required": [
+          "symbol"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "CompareBacktestsResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "symbol",
+          "comparisonCount",
+          "variants",
+          "compactReport"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "comparisonCount": {
+            "type": "integer"
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "compactReport": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "BacktestReportResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "run",
+          "filters",
+          "report"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "run": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "totalMatchedSnapshots": {
+            "type": "integer"
+          },
+          "returnedSnapshots": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "report": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "StockAnalysisResponse": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "RefreshStockHistoryRequest": {
+        "type": "object",
+        "properties": {
+          "includeRealLegal": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RefreshStockHistoryResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "symbol",
+          "refreshed",
+          "includeRealLegal",
+          "rowsUpserted",
+          "latestDataDate"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "refreshed": {
+            "type": "boolean"
+          },
+          "includeRealLegal": {
+            "type": "boolean"
+          },
+          "rowsUpserted": {
+            "type": "integer"
+          },
+          "latestDataDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "StockHistoryResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "symbol",
+          "limit",
+          "offset",
+          "rows"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "LatestStockMetricResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "symbol",
+          "row"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "row": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "securitySchemes": {}
+  }
+}

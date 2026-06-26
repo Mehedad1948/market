@@ -12,7 +12,11 @@ const authServiceMocks = vi.hoisted(() => ({
   getAuthContextFromToken: vi.fn(),
   extractBearerToken: vi.fn(),
   revokeSession: vi.fn(),
-  authenticateWithBale: vi.fn()
+  requestEmailLoginOtp: vi.fn(),
+  verifyEmailLoginOtp: vi.fn(),
+  authenticateWithBale: vi.fn(),
+  authenticateWithTelegram: vi.fn(),
+  authenticateWithGoogle: vi.fn()
 }));
 
 vi.mock('../src/services/auth.service', () => ({
@@ -20,10 +24,29 @@ vi.mock('../src/services/auth.service', () => ({
     buildAnonymousAuthContext: authServiceMocks.buildAnonymousAuthContext,
     getAuthContextFromToken: authServiceMocks.getAuthContextFromToken,
     revokeSession: authServiceMocks.revokeSession,
-    authenticateWithBale: authServiceMocks.authenticateWithBale
+    requestEmailLoginOtp: authServiceMocks.requestEmailLoginOtp,
+    verifyEmailLoginOtp: authServiceMocks.verifyEmailLoginOtp,
+    authenticateWithBale: authServiceMocks.authenticateWithBale,
+    authenticateWithTelegram: authServiceMocks.authenticateWithTelegram,
+    authenticateWithGoogle: authServiceMocks.authenticateWithGoogle
   },
   extractBearerToken: authServiceMocks.extractBearerToken
 }));
+
+vi.mock('../src/config/env', async () => {
+  const actual = await vi.importActual<typeof import('../src/config/env')>(
+    '../src/config/env'
+  );
+
+  return {
+    env: {
+      ...actual.env,
+      BALE_BOT_TOKEN: 'test-bale-token',
+      TELEGRAM_BOT_TOKEN: 'telegram-test-bot-token',
+      GOOGLE_CLIENT_ID: 'google-client-id-1'
+    }
+  };
+});
 
 import { createApp } from '../src/app';
 
@@ -60,7 +83,11 @@ describe('auth routes', () => {
     authServiceMocks.getAuthContextFromToken.mockReset();
     authServiceMocks.extractBearerToken.mockReset();
     authServiceMocks.revokeSession.mockReset();
+    authServiceMocks.requestEmailLoginOtp.mockReset();
+    authServiceMocks.verifyEmailLoginOtp.mockReset();
     authServiceMocks.authenticateWithBale.mockReset();
+    authServiceMocks.authenticateWithTelegram.mockReset();
+    authServiceMocks.authenticateWithGoogle.mockReset();
     process.env.BALE_BOT_TOKEN = 'test-bale-token';
   });
 
@@ -223,6 +250,92 @@ describe('auth routes', () => {
         baleUser: expect.objectContaining({
           id: '42'
         }),
+        currentUserId: null
+      })
+    );
+  });
+
+  it('requests an email OTP', async () => {
+    authServiceMocks.requestEmailLoginOtp.mockResolvedValue({
+      email: 'user@example.com',
+      expiresAt: '2026-06-26T10:10:00.000Z',
+      retryAfterSeconds: 60
+    });
+
+    const response = await fetch(`${baseUrl}/api/auth/email/request-otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: 'user@example.com'
+      })
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'OK',
+      channel: 'EMAIL',
+      email: 'user@example.com',
+      retryAfterSeconds: 60
+    });
+    expect(authServiceMocks.requestEmailLoginOtp).toHaveBeenCalledWith({
+      email: 'user@example.com'
+    });
+  });
+
+  it('verifies an email OTP and returns a session', async () => {
+    authServiceMocks.verifyEmailLoginOtp.mockResolvedValue({
+      token: 'email-session-token',
+      session: {
+        id: 'session-email',
+        userId: 'user-email',
+        expiresAt: '2026-07-20T00:00:00.000Z',
+        createdAt: '2026-06-20T00:00:00.000Z'
+      },
+      user: {
+        id: 'user-email',
+        email: 'user@example.com',
+        isActive: true
+      },
+      authAccount: {
+        id: 'auth-email',
+        provider: 'EMAIL',
+        providerAccountId: 'user@example.com'
+      },
+      isNewUser: true,
+      isNewAuthAccount: true
+    });
+
+    const response = await fetch(`${baseUrl}/api/auth/email/verify-otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: 'user@example.com',
+        code: '123456',
+        displayName: 'Email User'
+      })
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'OK',
+      provider: 'EMAIL',
+      token: 'email-session-token',
+      user: {
+        id: 'user-email',
+        email: 'user@example.com'
+      },
+      isNewUser: true,
+      isNewAuthAccount: true
+    });
+    expect(authServiceMocks.verifyEmailLoginOtp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'user@example.com',
+        code: '123456',
+        displayName: 'Email User',
         currentUserId: null
       })
     );
@@ -391,5 +504,115 @@ describe('auth routes', () => {
       status: 'ERROR',
       englishMessage: 'Invalid Bale auth payload'
     });
+  });
+
+  it('authenticates a Telegram user through the callback endpoint', async () => {
+    authServiceMocks.authenticateWithTelegram.mockResolvedValue({
+      token: 'telegram-session-token',
+      session: {
+        id: 'session-telegram',
+        userId: 'user-telegram',
+        expiresAt: '2026-07-20T00:00:00.000Z',
+        createdAt: '2026-06-20T00:00:00.000Z'
+      },
+      user: {
+        id: 'user-telegram',
+        telegramUserId: '12345',
+        telegramUsername: 'tg-user',
+        isActive: true
+      },
+      authAccount: {
+        id: 'auth-telegram',
+        provider: 'TELEGRAM',
+        providerAccountId: '12345'
+      },
+      isNewUser: true,
+      isNewAuthAccount: true
+    });
+
+    const response = await fetch(`${baseUrl}/api/auth/telegram/callback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: '12345',
+        first_name: 'Telegram',
+        username: 'tg-user',
+        auth_date: 1719000000,
+        hash: 'signed-hash'
+      })
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'OK',
+      provider: 'TELEGRAM',
+      token: 'telegram-session-token',
+      user: {
+        id: 'user-telegram',
+        telegramUserId: '12345'
+      }
+    });
+    expect(authServiceMocks.authenticateWithTelegram).toHaveBeenCalledWith(
+      expect.objectContaining({
+        telegramUser: expect.objectContaining({
+          id: '12345',
+          firstName: 'Telegram'
+        })
+      })
+    );
+  });
+
+  it('authenticates a Google user through the callback endpoint', async () => {
+    authServiceMocks.authenticateWithGoogle.mockResolvedValue({
+      token: 'google-session-token',
+      session: {
+        id: 'session-google',
+        userId: 'user-google',
+        expiresAt: '2026-07-20T00:00:00.000Z',
+        createdAt: '2026-06-20T00:00:00.000Z'
+      },
+      user: {
+        id: 'user-google',
+        email: 'google@example.com',
+        isActive: true
+      },
+      authAccount: {
+        id: 'auth-google',
+        provider: 'GOOGLE',
+        providerAccountId: 'google-sub-1'
+      },
+      isNewUser: true,
+      isNewAuthAccount: true
+    });
+
+    const response = await fetch(`${baseUrl}/api/auth/google/callback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        idToken: 'google-id-token',
+        nonce: 'nonce-1'
+      })
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'OK',
+      provider: 'GOOGLE',
+      token: 'google-session-token',
+      user: {
+        id: 'user-google',
+        email: 'google@example.com'
+      }
+    });
+    expect(authServiceMocks.authenticateWithGoogle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idToken: 'google-id-token',
+        nonce: 'nonce-1'
+      })
+    );
   });
 });

@@ -1,4 +1,4 @@
-import type { NextFunction, Request, Response } from 'express';
+﻿import type { NextFunction, Request, Response } from 'express';
 
 import { env } from '../config/env';
 
@@ -10,6 +10,11 @@ type RateRecord = {
 const bucket = new Map<string, RateRecord>();
 
 export const rateLimit = (request: Request, response: Response, next: NextFunction) => {
+  if (env.NODE_ENV === 'development') {
+    next();
+    return;
+  }
+
   const key = request.ip ?? 'unknown';
   const now = Date.now();
   const current = bucket.get(key);
@@ -36,3 +41,4 @@ export const rateLimit = (request: Request, response: Response, next: NextFuncti
   bucket.set(key, current);
   next();
 };
+

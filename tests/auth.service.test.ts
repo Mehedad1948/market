@@ -11,8 +11,22 @@ const repositoryMocks = vi.hoisted(() => ({
   createUser: vi.fn(),
   updateUser: vi.fn(),
   updateLastLogin: vi.fn(),
+  createOtpCode: vi.fn(),
+  consumeOtpCode: vi.fn(),
+  consumeActiveOtpCodesForTarget: vi.fn(),
+  findLatestActiveOtpCodeByTarget: vi.fn(),
+  findLatestOtpCodeByTarget: vi.fn(),
   findAuthAccountByProviderAccount: vi.fn(),
   upsertAuthAccountByProviderAccount: vi.fn()
+}));
+
+const joseMocks = vi.hoisted(() => ({
+  jwtVerify: vi.fn(),
+  createRemoteJWKSet: vi.fn(() => 'google-jwks')
+}));
+
+const emailAuthNotifierMocks = vi.hoisted(() => ({
+  sendLoginOtp: vi.fn()
 }));
 
 vi.mock('../src/repositories/session.repository', () => ({
@@ -42,14 +56,61 @@ vi.mock('../src/repositories/userAuthAccount.repository', () => ({
   }
 }));
 
+vi.mock('../src/repositories/otpCode.repository', () => ({
+  otpCodeRepository: {
+    create: repositoryMocks.createOtpCode,
+    consume: repositoryMocks.consumeOtpCode,
+    consumeActiveForTarget: repositoryMocks.consumeActiveOtpCodesForTarget,
+    findLatestActiveByTarget: repositoryMocks.findLatestActiveOtpCodeByTarget,
+    findLatestByTarget: repositoryMocks.findLatestOtpCodeByTarget
+  }
+}));
+
+vi.mock('../src/services/emailAuthNotifier.service', () => ({
+  emailAuthNotifier: {
+    sendLoginOtp: emailAuthNotifierMocks.sendLoginOtp
+  }
+}));
+
+vi.mock('../src/config/env', async () => {
+  const actual = await vi.importActual<typeof import('../src/config/env')>(
+    '../src/config/env'
+  );
+
+  return {
+    env: {
+      ...actual.env,
+      GOOGLE_CLIENT_ID: 'google-client-id-1',
+      TELEGRAM_BOT_TOKEN: 'telegram-bot-token-1',
+      AUTH_EMAIL_OTP_TTL_MINUTES: 10,
+      AUTH_EMAIL_OTP_COOLDOWN_SECONDS: 60,
+      AUTH_EMAIL_OTP_LENGTH: 6,
+      MAILTRAP_HOST: 'sandbox.smtp.mailtrap.io',
+      MAILTRAP_PORT: 587,
+      MAILTRAP_USER: 'mailtrap-user',
+      MAILTRAP_PASS: 'mailtrap-pass',
+      MAILTRAP_SECURE: false,
+      MAILTRAP_FROM_EMAIL: 'auth@example.com',
+      MAILTRAP_FROM_NAME: 'Market Auth'
+    }
+  };
+});
+
+vi.mock('jose', () => ({
+  jwtVerify: joseMocks.jwtVerify,
+  createRemoteJWKSet: joseMocks.createRemoteJWKSet
+}));
+
 import {
   authService,
   extractBearerToken,
   hashSessionToken
 } from '../src/services/auth.service';
+import { env } from '../src/config/env';
 
 describe('auth.service', () => {
   beforeEach(() => {
+    env.NODE_ENV = 'test';
     repositoryMocks.createSession.mockReset();
     repositoryMocks.findActiveByTokenHash.mockReset();
     repositoryMocks.revokeById.mockReset();
@@ -60,8 +121,15 @@ describe('auth.service', () => {
     repositoryMocks.createUser.mockReset();
     repositoryMocks.updateUser.mockReset();
     repositoryMocks.updateLastLogin.mockReset();
+    repositoryMocks.createOtpCode.mockReset();
+    repositoryMocks.consumeOtpCode.mockReset();
+    repositoryMocks.consumeActiveOtpCodesForTarget.mockReset();
+    repositoryMocks.findLatestActiveOtpCodeByTarget.mockReset();
+    repositoryMocks.findLatestOtpCodeByTarget.mockReset();
     repositoryMocks.findAuthAccountByProviderAccount.mockReset();
     repositoryMocks.upsertAuthAccountByProviderAccount.mockReset();
+    joseMocks.jwtVerify.mockReset();
+    emailAuthNotifierMocks.sendLoginOtp.mockReset();
   });
 
   it('extracts a bearer token from the authorization header', () => {
@@ -420,5 +488,323 @@ describe('auth.service', () => {
     expect(result.isNewUser).toBe(false);
     expect(result.isNewAuthAccount).toBe(false);
     expect(result.user?.id).toBe('user-1');
+  });
+
+  it('creates a Telegram-linked user and session on first login', async () => {
+    const authDate = Math.floor(Date.now() / 1000);
+    repositoryMocks.findAuthAccountByProviderAccount.mockResolvedValue(null);
+    repositoryMocks.findByTelegramUserId.mockResolvedValue(null);
+    repositoryMocks.findByEmail.mockResolvedValue(null);
+    repositoryMocks.findByPhone.mockResolvedValue(null);
+    repositoryMocks.createUser.mockResolvedValue({
+      id: 'user-telegram',
+      displayName: 'Telegram',
+      firstName: 'Telegram',
+      lastName: null,
+      email: null,
+      phone: null,
+      avatarUrl: null,
+      telegramUserId: '12345',
+      telegramUsername: 'tg-user',
+      isActive: true,
+      trialUsed: false,
+      lastLoginAt: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.upsertAuthAccountByProviderAccount.mockResolvedValue({
+      id: 'auth-telegram',
+      userId: 'user-telegram',
+      provider: 'TELEGRAM',
+      providerAccountId: '12345'
+    });
+    repositoryMocks.createSession.mockResolvedValue({
+      id: 'session-telegram',
+      userId: 'user-telegram',
+      tokenHash: 'stored-hash',
+      expiresAt: new Date('2026-07-20T00:00:00.000Z'),
+      revokedAt: null,
+      ip: null,
+      userAgent: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.updateLastLogin.mockResolvedValue(null);
+
+    const crypto = await import('node:crypto');
+    const secretKey = crypto
+      .createHash('sha256')
+      .update('telegram-bot-token-1')
+      .digest();
+    const checkString = [
+      `auth_date=${authDate}`,
+      'first_name=Telegram',
+      'id=12345',
+      'username=tg-user'
+    ].join('\n');
+    const hash = crypto
+      .createHmac('sha256', secretKey)
+      .update(checkString)
+      .digest('hex');
+
+    const result = await authService.authenticateWithTelegram({
+      telegramUser: {
+        id: '12345',
+        firstName: 'Telegram',
+        username: 'tg-user',
+        authDate,
+        hash
+      }
+    });
+
+    expect(repositoryMocks.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        telegramUserId: '12345',
+        telegramUsername: 'tg-user'
+      })
+    );
+    expect(repositoryMocks.upsertAuthAccountByProviderAccount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'TELEGRAM',
+        providerAccountId: '12345'
+      })
+    );
+    expect(result.user?.telegramUserId).toBe('12345');
+  });
+
+  it('creates a Google-linked user and session on first login', async () => {
+    joseMocks.jwtVerify.mockResolvedValue({
+      payload: {
+        sub: 'google-sub-1',
+        email: 'google@example.com',
+        email_verified: true,
+        name: 'Google User',
+        given_name: 'Google',
+        family_name: 'User',
+        picture: 'https://example.com/google.png',
+        nonce: 'nonce-1'
+      }
+    });
+    repositoryMocks.findAuthAccountByProviderAccount.mockResolvedValue(null);
+    repositoryMocks.findByEmail.mockResolvedValue(null);
+    repositoryMocks.findByPhone.mockResolvedValue(null);
+    repositoryMocks.createUser.mockResolvedValue({
+      id: 'user-google',
+      displayName: 'Google User',
+      firstName: 'Google',
+      lastName: 'User',
+      email: 'google@example.com',
+      phone: null,
+      avatarUrl: 'https://example.com/google.png',
+      telegramUserId: null,
+      telegramUsername: null,
+      isActive: true,
+      trialUsed: false,
+      lastLoginAt: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.upsertAuthAccountByProviderAccount.mockResolvedValue({
+      id: 'auth-google',
+      userId: 'user-google',
+      provider: 'GOOGLE',
+      providerAccountId: 'google-sub-1'
+    });
+    repositoryMocks.createSession.mockResolvedValue({
+      id: 'session-google',
+      userId: 'user-google',
+      tokenHash: 'stored-hash',
+      expiresAt: new Date('2026-07-20T00:00:00.000Z'),
+      revokedAt: null,
+      ip: null,
+      userAgent: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.updateLastLogin.mockResolvedValue(null);
+
+    const result = await authService.authenticateWithGoogle({
+      idToken: 'google-id-token',
+      nonce: 'nonce-1'
+    });
+
+    expect(joseMocks.jwtVerify).toHaveBeenCalledWith(
+      'google-id-token',
+      'google-jwks',
+      expect.objectContaining({
+        audience: 'google-client-id-1'
+      })
+    );
+    expect(repositoryMocks.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'google@example.com'
+      })
+    );
+    expect(repositoryMocks.upsertAuthAccountByProviderAccount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'GOOGLE',
+        providerAccountId: 'google-sub-1'
+      })
+    );
+    expect(result.user?.email).toBe('google@example.com');
+  });
+
+  it('creates and sends an email OTP', async () => {
+    repositoryMocks.findLatestOtpCodeByTarget.mockResolvedValue(null);
+    repositoryMocks.findByEmail.mockResolvedValue({
+      id: 'user-1'
+    });
+    repositoryMocks.consumeActiveOtpCodesForTarget.mockResolvedValue({ count: 0 });
+    repositoryMocks.createOtpCode.mockResolvedValue({
+      id: 'otp-1'
+    });
+    emailAuthNotifierMocks.sendLoginOtp.mockResolvedValue({
+      id: 'email-1'
+    });
+
+    const result = await authService.requestEmailLoginOtp({
+      email: 'USER@example.com'
+    });
+
+    expect(repositoryMocks.createOtpCode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        channel: 'EMAIL',
+        target: 'user@example.com',
+        purpose: 'LOGIN',
+        codeHash: expect.any(String),
+        expiresAt: expect.any(Date)
+      })
+    );
+    expect(emailAuthNotifierMocks.sendLoginOtp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'user@example.com',
+        code: expect.stringMatching(/^\d{6}$/)
+      })
+    );
+    expect(result.email).toBe('user@example.com');
+    expect(result.retryAfterSeconds).toBe(60);
+  });
+
+  it('rejects email OTP requests during cooldown', async () => {
+    repositoryMocks.findLatestOtpCodeByTarget.mockResolvedValue({
+      id: 'otp-1',
+      consumedAt: null,
+      createdAt: new Date(Date.now() - 10 * 1000)
+    });
+
+    await expect(
+      authService.requestEmailLoginOtp({
+        email: 'user@example.com'
+      })
+    ).rejects.toMatchObject({
+      statusCode: 429,
+      payload: expect.objectContaining({
+        englishMessage: 'OTP was requested too recently'
+      })
+    });
+  });
+
+  it('skips email OTP cooldown checks in development', async () => {
+    env.NODE_ENV = 'development';
+    repositoryMocks.findLatestOtpCodeByTarget.mockResolvedValue({
+      id: 'otp-1',
+      consumedAt: null,
+      createdAt: new Date(Date.now() - 10 * 1000)
+    });
+    repositoryMocks.findByEmail.mockResolvedValue({
+      id: 'user-1'
+    });
+    repositoryMocks.consumeActiveOtpCodesForTarget.mockResolvedValue({ count: 0 });
+    repositoryMocks.createOtpCode.mockResolvedValue({
+      id: 'otp-2'
+    });
+    emailAuthNotifierMocks.sendLoginOtp.mockResolvedValue({
+      id: 'email-1'
+    });
+
+    await expect(
+      authService.requestEmailLoginOtp({
+        email: 'user@example.com'
+      })
+    ).resolves.toMatchObject({
+      email: 'user@example.com',
+      retryAfterSeconds: 60
+    });
+  });
+
+  it('verifies an email OTP and creates an auth session', async () => {
+    const email = 'user@example.com';
+    const code = '123456';
+
+    repositoryMocks.findLatestActiveOtpCodeByTarget.mockResolvedValue({
+      id: 'otp-1',
+      userId: null,
+      codeHash: (await import('node:crypto'))
+        .createHash('sha256')
+        .update(`EMAIL:${email}:${code}`)
+        .digest('hex')
+    });
+    repositoryMocks.findAuthAccountByProviderAccount.mockResolvedValue(null);
+    repositoryMocks.findByEmail.mockResolvedValue(null);
+    repositoryMocks.findByPhone.mockResolvedValue(null);
+    repositoryMocks.createUser.mockResolvedValue({
+      id: 'user-email',
+      displayName: 'Email User',
+      firstName: null,
+      lastName: null,
+      email,
+      phone: null,
+      avatarUrl: null,
+      telegramUserId: null,
+      telegramUsername: null,
+      isActive: true,
+      trialUsed: false,
+      lastLoginAt: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.upsertAuthAccountByProviderAccount.mockResolvedValue({
+      id: 'auth-email',
+      userId: 'user-email',
+      provider: 'EMAIL',
+      providerAccountId: email
+    });
+    repositoryMocks.createSession.mockResolvedValue({
+      id: 'session-email',
+      userId: 'user-email',
+      tokenHash: 'stored-hash',
+      expiresAt: new Date('2026-07-20T00:00:00.000Z'),
+      revokedAt: null,
+      ip: null,
+      userAgent: null,
+      createdAt: new Date('2026-06-20T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-20T00:00:00.000Z')
+    });
+    repositoryMocks.updateLastLogin.mockResolvedValue(null);
+    repositoryMocks.consumeOtpCode.mockResolvedValue({
+      id: 'otp-1'
+    });
+
+    const result = await authService.verifyEmailLoginOtp({
+      email,
+      code,
+      displayName: 'Email User'
+    });
+
+    expect(repositoryMocks.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email,
+        displayName: 'Email User'
+      })
+    );
+    expect(repositoryMocks.upsertAuthAccountByProviderAccount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'EMAIL',
+        providerAccountId: email
+      })
+    );
+    expect(repositoryMocks.consumeOtpCode).toHaveBeenCalledWith('otp-1');
+    expect(result.user?.email).toBe(email);
   });
 });

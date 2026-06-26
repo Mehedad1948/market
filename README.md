@@ -130,6 +130,8 @@ SIGNAL_SCAN_INCLUDE_REAL_LEGAL=false
 SIGNAL_SCAN_SYMBOL_DELAY_MS=30000
 BALE_BOT_TOKEN=
 BALE_BOT_CHAT_ID=
+GOOGLE_CLIENT_ID=
+TELEGRAM_BOT_TOKEN=
 COMPOSITE_SCORING_VERSION=3
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX_REQUESTS=60
@@ -158,7 +160,7 @@ Provider login flows are not implemented yet. The current foundation is limited 
 
 Sample local requests are available in [requests/localhost.http](/D:/projects/market/requests/localhost.http).
 
-Frontend integration artifacts for the new watchlist and alert endpoints are generated into:
+Frontend integration artifacts for the current API surface are generated into:
 
 - [docs/frontend-api.md](/D:/projects/market/docs/frontend-api.md)
 - [docs/frontend-api.types.ts](/D:/projects/market/docs/frontend-api.types.ts)

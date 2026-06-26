@@ -3,6 +3,23 @@ import { z } from 'zod';
 
 dotenv.config();
 
+const booleanFromEnv = (defaultValue: boolean) =>
+  z.preprocess((value) => {
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+
+      if (['true', '1', 'yes', 'on'].includes(normalized)) {
+        return true;
+      }
+
+      if (['false', '0', 'no', 'off'].includes(normalized)) {
+        return false;
+      }
+    }
+
+    return value;
+  }, z.boolean()).default(defaultValue);
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
@@ -71,12 +88,12 @@ const envSchema = z.object({
   LIQUIDITY_CONFIRMATION_WINDOW: z.coerce.number().int().positive().default(20),
   LIQUIDITY_EXPANSION_THRESHOLD: z.coerce.number().positive().default(1.5),
   LIQUIDITY_CONTRACTION_THRESHOLD: z.coerce.number().positive().default(0.7),
-  SIGNAL_SCAN_ENABLED: z.coerce.boolean().default(true),
+  SIGNAL_SCAN_ENABLED: booleanFromEnv(true),
   SIGNAL_SCAN_CRON: z.string().min(1).default('0 22 * * 0-4'),
   SIGNAL_SCAN_TIMEZONE: z.string().min(1).default('Asia/Tehran'),
   SIGNAL_SCAN_SYMBOLS: z.string().default(''),
-  SIGNAL_SCAN_FORCE_REFRESH: z.coerce.boolean().default(true),
-  SIGNAL_SCAN_INCLUDE_REAL_LEGAL: z.coerce.boolean().default(false),
+  SIGNAL_SCAN_FORCE_REFRESH: booleanFromEnv(true),
+  SIGNAL_SCAN_INCLUDE_REAL_LEGAL: booleanFromEnv(false),
   SIGNAL_SCAN_SYMBOL_DELAY_MS: z.coerce
     .number()
     .int()
@@ -85,6 +102,22 @@ const envSchema = z.object({
   INTERNAL_API_TOKEN: z.string().default(''),
   BALE_BOT_TOKEN: z.string().default(''),
   BALE_BOT_CHAT_ID: z.string().default(''),
+  GOOGLE_CLIENT_ID: z.string().default(''),
+  TELEGRAM_BOT_TOKEN: z.string().default(''),
+  MAILTRAP_HOST: z.string().default(''),
+  MAILTRAP_PORT: z.coerce.number().int().positive().default(587),
+  MAILTRAP_USER: z.string().default(''),
+  MAILTRAP_PASS: z.string().default(''),
+  MAILTRAP_SECURE: booleanFromEnv(false),
+  MAILTRAP_FROM_EMAIL: z.string().email().or(z.literal('')).default(''),
+  MAILTRAP_FROM_NAME: z.string().default('Market Auth'),
+  AUTH_EMAIL_OTP_TTL_MINUTES: z.coerce.number().int().positive().default(10),
+  AUTH_EMAIL_OTP_COOLDOWN_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
+  AUTH_EMAIL_OTP_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
   COMPOSITE_SCORING_VERSION: z.coerce.number().int().positive().default(3),
   DB_OPERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),

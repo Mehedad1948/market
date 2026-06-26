@@ -9,8 +9,14 @@ datasource db {
 
 enum AuthProvider {
   BALE
+  EMAIL
   GOOGLE
   TELEGRAM
+  SMS
+}
+
+enum OtpChannel {
+  EMAIL
   SMS
 }
 
@@ -323,17 +329,18 @@ model UserSession {
 }
 
 model OtpCode {
-  id          String     @id @default(uuid())
-  userId      String?
-  targetPhone String
-  codeHash    String
-  purpose     OtpPurpose
-  expiresAt   DateTime
-  consumedAt  DateTime?
-  createdAt   DateTime   @default(now())
-  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id         String     @id @default(uuid())
+  userId     String?
+  channel    OtpChannel
+  target     String
+  codeHash   String
+  purpose    OtpPurpose
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([targetPhone, expiresAt])
+  @@index([channel, target, expiresAt])
   @@index([userId, createdAt])
 }
 

@@ -1,6 +1,7 @@
-import type { NextFunction, Request, Response } from 'express';
+﻿import type { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 
+import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import { requireAuthenticatedUser } from '../middleware/auth';
 import { authService } from '../services/auth.service';
@@ -16,6 +17,34 @@ const baleCallbackBodySchema = z.object({
   }),
   email: z.string().trim().email().optional().nullable(),
   phone: z.string().trim().min(3).optional().nullable(),
+  displayName: z.string().trim().min(1).optional().nullable()
+});
+
+const telegramCallbackBodySchema = z.object({
+  id: z.union([z.string(), z.number()]).transform((value) => String(value)),
+  first_name: z.string().trim().min(1),
+  last_name: z.string().trim().min(1).optional().nullable(),
+  username: z.string().trim().min(1).optional().nullable(),
+  photo_url: z.string().trim().url().optional().nullable(),
+  auth_date: z.union([z.string(), z.number()]).transform((value) => Number(value)),
+  hash: z.string().trim().min(1)
+});
+
+const googleCallbackBodySchema = z.object({
+  idToken: z.string().trim().min(1),
+  nonce: z.string().trim().min(1).optional().nullable()
+});
+
+const emailOtpRequestBodySchema = z.object({
+  email: z.string().trim().email()
+});
+
+const emailOtpVerifyBodySchema = z.object({
+  email: z.string().trim().email(),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{4,8}$/),
   displayName: z.string().trim().min(1).optional().nullable()
 });
 
@@ -42,8 +71,24 @@ const assertBaleBotToken = (request: Request) => {
   const expectedToken = process.env.BALE_BOT_TOKEN ?? '';
 
   if (!value || value !== expectedToken) {
-    throw new AppError('توکن احراز هویت بله معتبر نیست.', 401, {
+    throw new AppError('ØªÙˆÚ©Ù† Ø§Ø­Ø±Ø§Ø² Ù‡ÙˆÛŒØª Ø¨Ù„Ù‡ Ù…Ø¹ØªØ¨Ø± Ù†ÛŒØ³Øª.', 401, {
       englishMessage: 'Invalid Bale bot token'
+    });
+  }
+};
+
+const assertGoogleAuthConfigured = () => {
+  if (!env.GOOGLE_CLIENT_ID.trim()) {
+    throw new AppError('ÙˆØ±ÙˆØ¯ Ú¯ÙˆÚ¯Ù„ Ø¯Ø± Ø³Ø±ÙˆØ± Ù¾ÛŒÚ©Ø±Ø¨Ù†Ø¯ÛŒ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.', 500, {
+      englishMessage: 'Google auth is not configured'
+    });
+  }
+};
+
+const assertTelegramAuthConfigured = () => {
+  if (!env.TELEGRAM_BOT_TOKEN.trim()) {
+    throw new AppError('ÙˆØ±ÙˆØ¯ ØªÙ„Ú¯Ø±Ø§Ù… Ø¯Ø± Ø³Ø±ÙˆØ± Ù¾ÛŒÚ©Ø±Ø¨Ù†Ø¯ÛŒ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.', 500, {
+      englishMessage: 'Telegram auth is not configured'
     });
   }
 };
@@ -125,6 +170,183 @@ export const authenticateWithBale = async (
       isNewAuthAccount: result.isNewAuthAccount
     });
   } catch (error) {
+      next(error);
+  }
+};
+
+export const authenticateWithTelegram = async (
+  request: Request,
+  response: Response,
+  next: NextFunction
+) => {
+  try {
+    assertTelegramAuthConfigured();
+
+    const parsed = telegramCallbackBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new AppError('درخواست احراز هویت تلگرام معتبر نیست.', 400, {
+        englishMessage: 'Invalid Telegram auth payload',
+        issues: parsed.error.flatten()
+      });
+    }
+
+    const result = await authService.authenticateWithTelegram({
+      telegramUser: {
+        id: parsed.data.id,
+        firstName: parsed.data.first_name,
+        lastName: parsed.data.last_name ?? null,
+        username: parsed.data.username ?? null,
+        photoUrl: parsed.data.photo_url ?? null,
+        authDate: parsed.data.auth_date,
+        hash: parsed.data.hash
+      },
+      currentUserId: request.currentUser?.id ?? null,
+      sessionContext: {
+        ip: getRequestIp(request),
+        userAgent: getRequestUserAgent(request)
+      }
+    });
+
+    response.status(200).json({
+      status: 'OK',
+      provider: 'TELEGRAM',
+      authenticated: true,
+      token: result.token,
+      user: result.user,
+      session: result.session,
+      authAccount: {
+        id: result.authAccount.id,
+        provider: result.authAccount.provider,
+        providerAccountId: result.authAccount.providerAccountId
+      },
+      isNewUser: result.isNewUser,
+      linkedAccount: true,
+      isNewAuthAccount: result.isNewAuthAccount
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const authenticateWithGoogle = async (
+  request: Request,
+  response: Response,
+  next: NextFunction
+) => {
+  try {
+    assertGoogleAuthConfigured();
+
+    const parsed = googleCallbackBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new AppError('درخواست احراز هویت گوگل معتبر نیست.', 400, {
+        englishMessage: 'Invalid Google auth payload',
+        issues: parsed.error.flatten()
+      });
+    }
+
+    const result = await authService.authenticateWithGoogle({
+      idToken: parsed.data.idToken,
+      nonce: parsed.data.nonce ?? null,
+      currentUserId: request.currentUser?.id ?? null,
+      sessionContext: {
+        ip: getRequestIp(request),
+        userAgent: getRequestUserAgent(request)
+      }
+    });
+
+    response.status(200).json({
+      status: 'OK',
+      provider: 'GOOGLE',
+      authenticated: true,
+      token: result.token,
+      user: result.user,
+      session: result.session,
+      authAccount: {
+        id: result.authAccount.id,
+        provider: result.authAccount.provider,
+        providerAccountId: result.authAccount.providerAccountId
+      },
+      isNewUser: result.isNewUser,
+      linkedAccount: true,
+      isNewAuthAccount: result.isNewAuthAccount
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requestEmailOtp = async (
+  request: Request,
+  response: Response,
+  next: NextFunction
+) => {
+  try {
+    const parsed = emailOtpRequestBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new AppError('درخواست کد ورود ایمیل معتبر نیست.', 400, {
+        englishMessage: 'Invalid email OTP request payload',
+        issues: parsed.error.flatten()
+      });
+    }
+
+    const result = await authService.requestEmailLoginOtp({
+      email: parsed.data.email
+    });
+
+    response.status(200).json({
+      status: 'OK',
+      channel: 'EMAIL',
+      email: result.email,
+      expiresAt: result.expiresAt,
+      retryAfterSeconds: result.retryAfterSeconds
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyEmailOtp = async (
+  request: Request,
+  response: Response,
+  next: NextFunction
+) => {
+  try {
+    const parsed = emailOtpVerifyBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new AppError('درخواست تایید کد ایمیل معتبر نیست.', 400, {
+        englishMessage: 'Invalid email OTP verification payload',
+        issues: parsed.error.flatten()
+      });
+    }
+
+    const result = await authService.verifyEmailLoginOtp({
+      email: parsed.data.email,
+      code: parsed.data.code,
+      displayName: parsed.data.displayName ?? null,
+      currentUserId: request.currentUser?.id ?? null,
+      sessionContext: {
+        ip: getRequestIp(request),
+        userAgent: getRequestUserAgent(request)
+      }
+    });
+
+    response.status(200).json({
+      status: 'OK',
+      provider: 'EMAIL',
+      authenticated: true,
+      token: result.token,
+      user: result.user,
+      session: result.session,
+      authAccount: {
+        id: result.authAccount.id,
+        provider: result.authAccount.provider,
+        providerAccountId: result.authAccount.providerAccountId
+      },
+      isNewUser: result.isNewUser,
+      linkedAccount: true,
+      isNewAuthAccount: result.isNewAuthAccount
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -139,7 +361,7 @@ export const logoutCurrentSession = async (
 
     const session = request.auth.session;
     if (!session) {
-      throw new AppError('نشست کاربر معتبر نیست.', 401, {
+      throw new AppError('Ù†Ø´Ø³Øª Ú©Ø§Ø±Ø¨Ø± Ù…Ø¹ØªØ¨Ø± Ù†ÛŒØ³Øª.', 401, {
         englishMessage: 'Active session not found'
       });
     }
@@ -190,3 +412,5 @@ export const activateTrialSubscription = async (
     next(error);
   }
 };
+
+
