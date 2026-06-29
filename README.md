@@ -725,7 +725,7 @@ Future improvements intentionally deferred in this MVP:
               "value": false
             }
           },
-          "positionAdvice": {
+          "positionAdvice" : {
             "forNewPosition": {
               "label": "برای ورود جدید: صبر تا فعال شدن تریگر ورود",
               "value": "WAIT_FOR_ENTRY_TRIGGER"
