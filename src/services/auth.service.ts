@@ -11,7 +11,6 @@ import { otpCodeRepository } from '../repositories/otpCode.repository';
 import { sessionRepository } from '../repositories/session.repository';
 import { userAuthAccountRepository } from '../repositories/userAuthAccount.repository';
 import { userRepository } from '../repositories/user.repository';
-import { emailAuthNotifier } from './emailAuthNotifier.service';
 import type {
   AuthContext,
   AuthenticatedSession,
@@ -772,7 +771,8 @@ export const authService = {
     }
 
     const user = await userRepository.findByEmail(email);
-    const code = generateNumericOtp(env.AUTH_EMAIL_OTP_LENGTH);
+    const code =
+      env.AUTH_EMAIL_OTP_FIXED_CODE || generateNumericOtp(env.AUTH_EMAIL_OTP_LENGTH);
     const expiresAt = new Date(
       now.getTime() + env.AUTH_EMAIL_OTP_TTL_MINUTES * 60 * 1000
     );
@@ -797,14 +797,9 @@ export const authService = {
       expiresAt
     });
 
-    await emailAuthNotifier.sendLoginOtp({
-      email,
-      code,
-      expiresAt
-    });
-
     return {
       email,
+      otpCode: code,
       expiresAt,
       retryAfterSeconds: env.AUTH_EMAIL_OTP_COOLDOWN_SECONDS
     };

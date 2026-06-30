@@ -118,6 +118,11 @@ const envSchema = z.object({
     .positive()
     .default(60),
   AUTH_EMAIL_OTP_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
+  AUTH_EMAIL_OTP_FIXED_CODE: z
+    .string()
+    .regex(/^\d{4,8}$/)
+    .or(z.literal(''))
+    .default(''),
   COMPOSITE_SCORING_VERSION: z.coerce.number().int().positive().default(3),
   DB_OPERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),

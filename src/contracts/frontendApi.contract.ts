@@ -606,6 +606,7 @@ export type EmailOtpRequestResponse = {
   status: 'OK';
   channel: 'EMAIL';
   email: string;
+  otpCode: string;
   expiresAt: string;
   retryAfterSeconds: number;
 };
@@ -1640,11 +1641,12 @@ export const buildFrontendApiOpenApiSpec = (
       },
       EmailOtpRequestResponse: {
         type: 'object',
-        required: ['status', 'channel', 'email', 'expiresAt', 'retryAfterSeconds'],
+        required: ['status', 'channel', 'email', 'otpCode', 'expiresAt', 'retryAfterSeconds'],
         properties: {
           status: { type: 'string', enum: ['OK'] },
           channel: { type: 'string', enum: ['EMAIL'] },
           email: { type: 'string', format: 'email' },
+          otpCode: { type: 'string', pattern: '^\\d{4,8}$' },
           expiresAt: { type: 'string', format: 'date-time' },
           retryAfterSeconds: { type: 'integer' }
         },

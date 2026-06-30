@@ -25,10 +25,6 @@ const joseMocks = vi.hoisted(() => ({
   createRemoteJWKSet: vi.fn(() => 'google-jwks')
 }));
 
-const emailAuthNotifierMocks = vi.hoisted(() => ({
-  sendLoginOtp: vi.fn()
-}));
-
 vi.mock('../src/repositories/session.repository', () => ({
   sessionRepository: {
     create: repositoryMocks.createSession,
@@ -66,12 +62,6 @@ vi.mock('../src/repositories/otpCode.repository', () => ({
   }
 }));
 
-vi.mock('../src/services/emailAuthNotifier.service', () => ({
-  emailAuthNotifier: {
-    sendLoginOtp: emailAuthNotifierMocks.sendLoginOtp
-  }
-}));
-
 vi.mock('../src/config/env', async () => {
   const actual = await vi.importActual<typeof import('../src/config/env')>(
     '../src/config/env'
@@ -85,6 +75,7 @@ vi.mock('../src/config/env', async () => {
       AUTH_EMAIL_OTP_TTL_MINUTES: 10,
       AUTH_EMAIL_OTP_COOLDOWN_SECONDS: 60,
       AUTH_EMAIL_OTP_LENGTH: 6,
+      AUTH_EMAIL_OTP_FIXED_CODE: '',
       MAILTRAP_HOST: 'sandbox.smtp.mailtrap.io',
       MAILTRAP_PORT: 587,
       MAILTRAP_USER: 'mailtrap-user',
@@ -111,6 +102,7 @@ import { env } from '../src/config/env';
 describe('auth.service', () => {
   beforeEach(() => {
     env.NODE_ENV = 'test';
+    env.AUTH_EMAIL_OTP_FIXED_CODE = '';
     repositoryMocks.createSession.mockReset();
     repositoryMocks.findActiveByTokenHash.mockReset();
     repositoryMocks.revokeById.mockReset();
@@ -129,7 +121,6 @@ describe('auth.service', () => {
     repositoryMocks.findAuthAccountByProviderAccount.mockReset();
     repositoryMocks.upsertAuthAccountByProviderAccount.mockReset();
     joseMocks.jwtVerify.mockReset();
-    emailAuthNotifierMocks.sendLoginOtp.mockReset();
   });
 
   it('extracts a bearer token from the authorization header', () => {
@@ -649,7 +640,7 @@ describe('auth.service', () => {
     expect(result.user?.email).toBe('google@example.com');
   });
 
-  it('creates and sends an email OTP', async () => {
+  it('creates an email OTP without sending an email', async () => {
     repositoryMocks.findLatestOtpCodeByTarget.mockResolvedValue(null);
     repositoryMocks.findByEmail.mockResolvedValue({
       id: 'user-1'
@@ -657,9 +648,6 @@ describe('auth.service', () => {
     repositoryMocks.consumeActiveOtpCodesForTarget.mockResolvedValue({ count: 0 });
     repositoryMocks.createOtpCode.mockResolvedValue({
       id: 'otp-1'
-    });
-    emailAuthNotifierMocks.sendLoginOtp.mockResolvedValue({
-      id: 'email-1'
     });
 
     const result = await authService.requestEmailLoginOtp({
@@ -676,14 +664,27 @@ describe('auth.service', () => {
         expiresAt: expect.any(Date)
       })
     );
-    expect(emailAuthNotifierMocks.sendLoginOtp).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: 'user@example.com',
-        code: expect.stringMatching(/^\d{6}$/)
-      })
-    );
     expect(result.email).toBe('user@example.com');
+    expect(result.otpCode).toMatch(/^\d{6}$/);
     expect(result.retryAfterSeconds).toBe(60);
+  });
+
+  it('uses the configured fixed email OTP code', async () => {
+    env.AUTH_EMAIL_OTP_FIXED_CODE = '123456';
+    repositoryMocks.findLatestOtpCodeByTarget.mockResolvedValue(null);
+    repositoryMocks.findByEmail.mockResolvedValue({
+      id: 'user-1'
+    });
+    repositoryMocks.consumeActiveOtpCodesForTarget.mockResolvedValue({ count: 0 });
+    repositoryMocks.createOtpCode.mockResolvedValue({
+      id: 'otp-fixed'
+    });
+
+    const result = await authService.requestEmailLoginOtp({
+      email: 'user@example.com'
+    });
+
+    expect(result.otpCode).toBe('123456');
   });
 
   it('rejects email OTP requests during cooldown', async () => {
@@ -719,9 +720,6 @@ describe('auth.service', () => {
     repositoryMocks.createOtpCode.mockResolvedValue({
       id: 'otp-2'
     });
-    emailAuthNotifierMocks.sendLoginOtp.mockResolvedValue({
-      id: 'email-1'
-    });
 
     await expect(
       authService.requestEmailLoginOtp({
@@ -729,6 +727,7 @@ describe('auth.service', () => {
       })
     ).resolves.toMatchObject({
       email: 'user@example.com',
+      otpCode: expect.stringMatching(/^\d{6}$/),
       retryAfterSeconds: 60
     });
   });

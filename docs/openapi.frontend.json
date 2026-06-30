@@ -2517,6 +2517,7 @@
           "status",
           "channel",
           "email",
+          "otpCode",
           "expiresAt",
           "retryAfterSeconds"
         ],
@@ -2536,6 +2537,10 @@
           "email": {
             "type": "string",
             "format": "email"
+          },
+          "otpCode": {
+            "type": "string",
+            "pattern": "^\\d{4,8}$"
           },
           "expiresAt": {
             "type": "string",

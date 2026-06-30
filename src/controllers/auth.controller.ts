@@ -297,6 +297,7 @@ export const requestEmailOtp = async (
       status: 'OK',
       channel: 'EMAIL',
       email: result.email,
+      otpCode: result.otpCode,
       expiresAt: result.expiresAt,
       retryAfterSeconds: result.retryAfterSeconds
     });

@@ -75,6 +75,7 @@ export type EmailOtpRequestResponse = {
   status: 'OK';
   channel: 'EMAIL';
   email: string;
+  otpCode: string;
   expiresAt: string;
   retryAfterSeconds: number;
 };

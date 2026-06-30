@@ -258,6 +258,7 @@ describe('auth routes', () => {
   it('requests an email OTP', async () => {
     authServiceMocks.requestEmailLoginOtp.mockResolvedValue({
       email: 'user@example.com',
+      otpCode: '123456',
       expiresAt: '2026-06-26T10:10:00.000Z',
       retryAfterSeconds: 60
     });
@@ -277,6 +278,7 @@ describe('auth routes', () => {
       status: 'OK',
       channel: 'EMAIL',
       email: 'user@example.com',
+      otpCode: '123456',
       retryAfterSeconds: 60
     });
     expect(authServiceMocks.requestEmailLoginOtp).toHaveBeenCalledWith({
