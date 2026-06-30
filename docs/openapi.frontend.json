@@ -1300,6 +1300,68 @@
         ]
       }
     },
+    "/api/public/stocks/{symbol}/analysis": {
+      "get": {
+        "operationId": "getPublicStockAnalysis",
+        "summary": "Return the full stock analysis payload for one symbol through a public alias.",
+        "tags": [
+          "root"
+        ],
+        "responses": {
+          "200": {
+            "description": "Return the full stock analysis payload for one symbol through a public alias.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockAnalysisResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Error 502",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
     "/api/stocks/{symbol}/refresh": {
       "post": {
         "operationId": "refreshStockHistory",

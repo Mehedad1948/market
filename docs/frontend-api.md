@@ -327,6 +327,18 @@ Return the full stock analysis payload for one symbol.
 - Query type: `StockAnalysisQuery`
 - Error statuses: `400`, `404`, `502`
 
+### GET /api/public/stocks/{symbol}/analysis
+
+Return the full stock analysis payload for one symbol through a public alias.
+
+- Operation ID: `getPublicStockAnalysis`
+- Scope: `root`
+- Auth: `none`
+- Success: `200` -> `StockAnalysisResponse`
+- Path params type: `SymbolPathParams`
+- Query type: `StockAnalysisQuery`
+- Error statuses: `400`, `404`, `502`
+
 ### POST /api/stocks/{symbol}/refresh
 
 Refresh and persist stock history for one symbol.

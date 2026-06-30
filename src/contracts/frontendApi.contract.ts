@@ -318,6 +318,18 @@ export const frontendEndpointContracts: FrontendEndpointContract[] = [
     errorStatuses: [400, 404, 502]
   },
   {
+    operationId: 'getPublicStockAnalysis',
+    method: 'GET',
+    path: '/api/public/stocks/{symbol}/analysis',
+    summary: 'Return the full stock analysis payload for one symbol through a public alias.',
+    auth: 'none',
+    pathParamsType: 'SymbolPathParams',
+    queryType: 'StockAnalysisQuery',
+    responseBodyType: 'StockAnalysisResponse',
+    successStatus: 200,
+    errorStatuses: [400, 404, 502]
+  },
+  {
     operationId: 'refreshStockHistory',
     method: 'POST',
     path: '/api/stocks/{symbol}/refresh',

@@ -11,6 +11,7 @@ import { discountCodeRouter } from './routes/discountCode.routes';
 import { notificationRouter } from './routes/notification.routes';
 import { symbolCatalogRouter } from './routes/symbolCatalog.routes';
 import { stockRouter } from './routes/stock.routes';
+import { publicStockRouter } from './routes/publicStock.routes';
 import { watchlistRouter } from './routes/watchlist.routes';
 import { alertRuleRouter } from './routes/alertRule.routes';
 import { portfolioRouter } from './routes/portfolio.routes';
@@ -59,6 +60,7 @@ export const createApp = () => {
   app.use('/api/notifications', notificationRouter);
   app.use('/api/symbols', symbolCatalogRouter);
   app.use('/api/stocks', stockRouter);
+  app.use('/api/public/stocks', publicStockRouter);
   app.use('/api/watchlist', watchlistRouter);
   app.use('/api/alerts', alertRuleRouter);
   app.use('/api/portfolios', portfolioRouter);

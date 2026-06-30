@@ -48,6 +48,18 @@ Return the health probe payload.
 - Success: `200` -> `HealthResponse`
 - Error statuses: none
 
+### GET /api/public/stocks/{symbol}/analysis
+
+Return the full stock analysis payload for one symbol through a public alias.
+
+- Operation ID: `getPublicStockAnalysis`
+- Scope: `root`
+- Auth: `none`
+- Success: `200` -> `StockAnalysisResponse`
+- Path params type: `SymbolPathParams`
+- Query type: `StockAnalysisQuery`
+- Error statuses: `400`, `404`, `502`
+
 ### GET /api/portfolios
 
 List the authenticated user portfolios.

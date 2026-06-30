@@ -44,6 +44,42 @@ export type DiscountPreview = {
   };
 };
 
+export type SymbolPathParams = {
+  symbol: string;
+};
+
+export type StockAnalysisQuery = {
+  weeklyWindow?: number;
+  monthlyWindow?: number;
+  quarterlyWindow?: number;
+  forceRefresh?: boolean;
+  includeRealLegal?: boolean;
+};
+
+export type StockAnalysisResult = {
+  status: 'OK' | 'INSUFFICIENT_DATA';
+  symbol?: string;
+  source?: 'database' | 'brsapi' | 'mixed';
+  cacheHit?: boolean;
+  latestDataDate?: string;
+  windows?: {
+    weekly: number;
+    monthly: number;
+    quarterly: number;
+  };
+  metrics?: Record<string, JsonValue>;
+  analysisProfile?: {
+    indicatorMode: string;
+    disabledIndicators: string[];
+    enabledIndicators: string[];
+  };
+  signals?: Record<string, JsonValue>;
+  persianSummary?: string;
+  disclaimer?: string;
+};
+
+export type StockAnalysisResponse = StockAnalysisResult;
+
 export type PortfolioMetrics = {
   holdingsCount: number;
   pricedHoldingsCount: number;
